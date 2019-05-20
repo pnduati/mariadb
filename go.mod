@@ -1,10 +1,15 @@
-module github.com/kubedb/mysql
+module github.com/kubedb/mariadb
 
 go 1.12
 
 require (
+	github.com/Masterminds/glide v0.13.2 // indirect
+	github.com/Masterminds/semver v1.4.2 // indirect
+	github.com/Masterminds/vcs v1.13.0 // indirect
 	github.com/appscode/go v0.0.0-20190424183524-60025f1135c9
 	github.com/appscode/osm v0.11.0 // indirect
+	github.com/bmatcuk/doublestar v1.1.1 // indirect
+	github.com/codegangsta/cli v1.20.0 // indirect
 	github.com/codeskyblue/go-sh v0.0.0-20190412065543-76bd3d59ff27
 	github.com/coreos/go-semver v0.3.0
 	github.com/coreos/prometheus-operator v0.29.0
@@ -20,14 +25,19 @@ require (
 	github.com/kubedb/apimachinery v0.0.0-20190508221312-5ba915343400
 	github.com/lib/pq v1.1.1 // indirect
 	github.com/mattn/go-sqlite3 v1.10.0 // indirect
+	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/ncw/swift v1.0.47 // indirect
 	github.com/onsi/ginkgo v1.8.0
 	github.com/onsi/gomega v1.5.0
 	github.com/pkg/errors v0.8.1
+	github.com/sgotti/glide-vc v0.1.0 // indirect
 	github.com/spf13/cobra v0.0.3
 	github.com/spf13/pflag v1.0.3
 	github.com/ziutek/mymysql v1.5.4 // indirect
-	golang.org/x/sys v0.0.0-20190508220229-2d0786266e9c // indirect
+	golang.org/x/crypto v0.0.0-20190513172903-22d7a77e9e5f // indirect
+	golang.org/x/net v0.0.0-20190514140710-3ec191127204 // indirect
+	golang.org/x/sys v0.0.0-20190516110030-61b9204099cb // indirect
+	golang.org/x/tools v0.0.0-20190517183331-d88f79806bbd // indirect
 	k8s.io/api v0.0.0-20190503110853-61630f889b3c
 	k8s.io/apiextensions-apiserver v0.0.0-20190508184259-7784d62bc471
 	k8s.io/apimachinery v0.0.0-20190508063446-a3da69d3723c

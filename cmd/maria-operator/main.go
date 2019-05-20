@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/kubedb/mysql/pkg/cmds"
+	"github.com/kubedb/mariadb/pkg/cmds"
 	"kmodules.xyz/client-go/logs"
 )
 

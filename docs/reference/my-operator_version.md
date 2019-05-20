@@ -1,4 +1,4 @@
-## my-operator version
+## maria-operator version
 
 Prints binary version number.
 
@@ -7,7 +7,7 @@ Prints binary version number.
 Prints binary version number.
 
 ```
-my-operator version [flags]
+maria-operator version [flags]
 ```
 
 ### Options
@@ -35,5 +35,5 @@ my-operator version [flags]
 
 ### SEE ALSO
 
-* [my-operator](my-operator.md)	 - 
+* [maria-operator](maria-operator.md)	 - 
 

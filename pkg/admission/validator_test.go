@@ -390,7 +390,7 @@ func sampleMySQL() api.MySQL {
 				ScriptSource: &api.ScriptSourceSpec{
 					VolumeSource: core.VolumeSource{
 						GitRepo: &core.GitRepoVolumeSource{
-							Repository: "https://github.com/kubedb/mysql-init-scripts.git",
+							Repository: "https://github.com/kubedb/mariadb-init-scripts.git",
 							Directory:  ".",
 						},
 					},
