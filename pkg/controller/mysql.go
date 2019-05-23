@@ -23,88 +23,88 @@ import (
 	storage "kmodules.xyz/objectstore-api/osm"
 )
 
-func (c *Controller) create(mysql *api.MySQL) error {
-	if err := validator.ValidateMySQL(c.Client, c.ExtClient, mysql, true); err != nil {
+func (c *Controller) create(mariadb *api.MariaDB) error {
+	if err := validator.ValidateMariaDB(c.Client, c.ExtClient, mariadb, true); err != nil {
 		c.recorder.Event(
-			mysql,
+			mariadb,
 			core.EventTypeWarning,
 			eventer.EventReasonInvalid,
 			err.Error(),
 		)
 		log.Errorln(err)
 		// stop Scheduler in case there is any.
-		c.cronController.StopBackupScheduling(mysql.ObjectMeta)
+		c.cronController.StopBackupScheduling(mariadb.ObjectMeta)
 		return nil
 	}
 
 	// Delete Matching DormantDatabase if exists any
-	if err := c.deleteMatchingDormantDatabase(mysql); err != nil {
-		return fmt.Errorf(`failed to delete dormant Database : "%v/%v". Reason: %v`, mysql.Namespace, mysql.Name, err)
+	if err := c.deleteMatchingDormantDatabase(mariadb); err != nil {
+		return fmt.Errorf(`failed to delete dormant Database : "%v/%v". Reason: %v`, mariadb.Namespace, mariadb.Name, err)
 	}
 
-	if mysql.Status.Phase == "" {
-		my, err := util.UpdateMySQLStatus(c.ExtClient.KubedbV1alpha1(), mysql, func(in *api.MySQLStatus) *api.MySQLStatus {
+	if mariadb.Status.Phase == "" {
+		my, err := util.UpdateMariaDBStatus(c.ExtClient.KubedbV1alpha1(), mariadb, func(in *api.MariaDBStatus) *api.MariaDBStatus {
 			in.Phase = api.DatabasePhaseCreating
 			return in
 		}, apis.EnableStatusSubresource)
 		if err != nil {
 			return err
 		}
-		mysql.Status = my.Status
+		mariadb.Status = my.Status
 	}
 
 	// create Governing Service
-	governingService, err := c.createMySQLGoverningService(mysql)
+	governingService, err := c.createMariaDBGoverningService(mariadb)
 	if err != nil {
-		return fmt.Errorf(`failed to create Service: "%v/%v". Reason: %v`, mysql.Namespace, governingService, err)
+		return fmt.Errorf(`failed to create Service: "%v/%v". Reason: %v`, mariadb.Namespace, governingService, err)
 	}
 	c.GoverningService = governingService
 
 	if c.EnableRBAC {
 		// Ensure ClusterRoles for statefulsets
-		if err := c.ensureRBACStuff(mysql); err != nil {
+		if err := c.ensureRBACStuff(mariadb); err != nil {
 			return err
 		}
 	}
 
 	// ensure database Service
-	vt1, err := c.ensureService(mysql)
+	vt1, err := c.ensureService(mariadb)
 	if err != nil {
 		return err
 	}
 
-	if err := c.ensureDatabaseSecret(mysql); err != nil {
+	if err := c.ensureDatabaseSecret(mariadb); err != nil {
 		return err
 	}
 
 	// ensure database StatefulSet
-	vt2, err := c.ensureStatefulSet(mysql)
+	vt2, err := c.ensureStatefulSet(mariadb)
 	if err != nil {
 		return err
 	}
 
 	if vt1 == kutil.VerbCreated && vt2 == kutil.VerbCreated {
 		c.recorder.Event(
-			mysql,
+			mariadb,
 			core.EventTypeNormal,
 			eventer.EventReasonSuccessful,
-			"Successfully created MySQL",
+			"Successfully created MariaDB",
 		)
 	} else if vt1 == kutil.VerbPatched || vt2 == kutil.VerbPatched {
 		c.recorder.Event(
-			mysql,
+			mariadb,
 			core.EventTypeNormal,
 			eventer.EventReasonSuccessful,
-			"Successfully patched MySQL",
+			"Successfully patched MariaDB",
 		)
 	}
 
-	if _, err := meta_util.GetString(mysql.Annotations, api.AnnotationInitialized); err == kutil.ErrNotFound &&
-		mysql.Spec.Init != nil && mysql.Spec.Init.SnapshotSource != nil {
+	if _, err := meta_util.GetString(mariadb.Annotations, api.AnnotationInitialized); err == kutil.ErrNotFound &&
+		mariadb.Spec.Init != nil && mariadb.Spec.Init.SnapshotSource != nil {
 
-		snapshotSource := mysql.Spec.Init.SnapshotSource
+		snapshotSource := mariadb.Spec.Init.SnapshotSource
 
-		if mysql.Status.Phase == api.DatabasePhaseInitializing {
+		if mariadb.Status.Phase == api.DatabasePhaseInitializing {
 			return nil
 		}
 		jobName := fmt.Sprintf("%s-%s", api.DatabaseNamePrefix, snapshotSource.Name)
@@ -115,26 +115,26 @@ func (c *Controller) create(mysql *api.MySQL) error {
 		} else {
 			return nil
 		}
-		if err := c.initialize(mysql); err != nil {
-			return fmt.Errorf("failed to complete initialization for %v/%v. Reason: %v", mysql.Namespace, mysql.Name, err)
+		if err := c.initialize(mariadb); err != nil {
+			return fmt.Errorf("failed to complete initialization for %v/%v. Reason: %v", mariadb.Namespace, mariadb.Name, err)
 		}
 		return nil
 	}
 
-	my, err := util.UpdateMySQLStatus(c.ExtClient.KubedbV1alpha1(), mysql, func(in *api.MySQLStatus) *api.MySQLStatus {
+	my, err := util.UpdateMariaDBStatus(c.ExtClient.KubedbV1alpha1(), mariadb, func(in *api.MariaDBStatus) *api.MariaDBStatus {
 		in.Phase = api.DatabasePhaseRunning
-		in.ObservedGeneration = types.NewIntHash(mysql.Generation, meta_util.GenerationHash(mysql))
+		in.ObservedGeneration = types.NewIntHash(mariadb.Generation, meta_util.GenerationHash(mariadb))
 		return in
 	}, apis.EnableStatusSubresource)
 	if err != nil {
 		return err
 	}
-	mysql.Status = my.Status
+	mariadb.Status = my.Status
 
 	// Ensure Schedule backup
-	if err := c.ensureBackupScheduler(mysql); err != nil {
+	if err := c.ensureBackupScheduler(mariadb); err != nil {
 		c.recorder.Eventf(
-			mysql,
+			mariadb,
 			core.EventTypeWarning,
 			eventer.EventReasonFailedToSchedule,
 			err.Error(),
@@ -144,9 +144,9 @@ func (c *Controller) create(mysql *api.MySQL) error {
 	}
 
 	// ensure StatsService for desired monitoring
-	if _, err := c.ensureStatsService(mysql); err != nil {
+	if _, err := c.ensureStatsService(mariadb); err != nil {
 		c.recorder.Eventf(
-			mysql,
+			mariadb,
 			core.EventTypeWarning,
 			eventer.EventReasonFailedToCreate,
 			"Failed to manage monitoring system. Reason: %v",
@@ -156,9 +156,9 @@ func (c *Controller) create(mysql *api.MySQL) error {
 		return nil
 	}
 
-	if err := c.manageMonitor(mysql); err != nil {
+	if err := c.manageMonitor(mariadb); err != nil {
 		c.recorder.Eventf(
-			mysql,
+			mariadb,
 			core.EventTypeWarning,
 			eventer.EventReasonFailedToCreate,
 			"Failed to manage monitoring system. Reason: %v",
@@ -168,7 +168,7 @@ func (c *Controller) create(mysql *api.MySQL) error {
 		return nil
 	}
 
-	_, err = c.ensureAppBinding(mysql)
+	_, err = c.ensureAppBinding(mariadb)
 	if err != nil {
 		log.Errorln(err)
 		return err
@@ -177,37 +177,37 @@ func (c *Controller) create(mysql *api.MySQL) error {
 	return nil
 }
 
-func (c *Controller) ensureBackupScheduler(mysql *api.MySQL) error {
-	mysqlVersion, err := c.ExtClient.CatalogV1alpha1().MySQLVersions().Get(string(mysql.Spec.Version), metav1.GetOptions{})
+func (c *Controller) ensureBackupScheduler(mariadb *api.MariaDB) error {
+	mariadbVersion, err := c.ExtClient.CatalogV1alpha1().MariaDBVersions().Get(string(mariadb.Spec.Version), metav1.GetOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to get MySQLVersion %v for %v/%v. Reason: %v", mysql.Spec.Version, mysql.Namespace, mysql.Name, err)
+		return fmt.Errorf("failed to get MariaDBVersion %v for %v/%v. Reason: %v", mariadb.Spec.Version, mariadb.Namespace, mariadb.Name, err)
 	}
 	// Setup Schedule backup
-	if mysql.Spec.BackupSchedule != nil {
-		err := c.cronController.ScheduleBackup(mysql, mysql.Spec.BackupSchedule, mysqlVersion)
+	if mariadb.Spec.BackupSchedule != nil {
+		err := c.cronController.ScheduleBackup(mariadb, mariadb.Spec.BackupSchedule, mariadbVersion)
 		if err != nil {
-			return fmt.Errorf("failed to schedule snapshot for %v/%v. Reason: %v", mysql.Namespace, mysql.Name, err)
+			return fmt.Errorf("failed to schedule snapshot for %v/%v. Reason: %v", mariadb.Namespace, mariadb.Name, err)
 		}
 	} else {
-		c.cronController.StopBackupScheduling(mysql.ObjectMeta)
+		c.cronController.StopBackupScheduling(mariadb.ObjectMeta)
 	}
 	return nil
 }
 
-func (c *Controller) initialize(mysql *api.MySQL) error {
-	my, err := util.UpdateMySQLStatus(c.ExtClient.KubedbV1alpha1(), mysql, func(in *api.MySQLStatus) *api.MySQLStatus {
+func (c *Controller) initialize(mariadb *api.MariaDB) error {
+	my, err := util.UpdateMariaDBStatus(c.ExtClient.KubedbV1alpha1(), mariadb, func(in *api.MariaDBStatus) *api.MariaDBStatus {
 		in.Phase = api.DatabasePhaseInitializing
 		return in
 	}, apis.EnableStatusSubresource)
 	if err != nil {
 		return err
 	}
-	mysql.Status = my.Status
+	mariadb.Status = my.Status
 
-	snapshotSource := mysql.Spec.Init.SnapshotSource
+	snapshotSource := mariadb.Spec.Init.SnapshotSource
 	// Event for notification that kubernetes objects are creating
 	c.recorder.Eventf(
-		mysql,
+		mariadb,
 		core.EventTypeNormal,
 		eventer.EventReasonInitializing,
 		`Initializing from Snapshot: "%v"`,
@@ -216,7 +216,7 @@ func (c *Controller) initialize(mysql *api.MySQL) error {
 
 	namespace := snapshotSource.Namespace
 	if namespace == "" {
-		namespace = mysql.Namespace
+		namespace = mariadb.Namespace
 	}
 	snapshot, err := c.ExtClient.KubedbV1alpha1().Snapshots(namespace).Get(snapshotSource.Name, metav1.GetOptions{})
 	if err != nil {
@@ -232,7 +232,7 @@ func (c *Controller) initialize(mysql *api.MySQL) error {
 		return err
 	}
 
-	job, err := c.createRestoreJob(mysql, snapshot)
+	job, err := c.createRestoreJob(mariadb, snapshot)
 	if err != nil {
 		return err
 	}
@@ -244,49 +244,49 @@ func (c *Controller) initialize(mysql *api.MySQL) error {
 	return nil
 }
 
-func (c *Controller) terminate(mysql *api.MySQL) error {
-	ref, rerr := reference.GetReference(clientsetscheme.Scheme, mysql)
+func (c *Controller) terminate(mariadb *api.MariaDB) error {
+	ref, rerr := reference.GetReference(clientsetscheme.Scheme, mariadb)
 	if rerr != nil {
 		return rerr
 	}
 
 	// If TerminationPolicy is "pause", keep everything (ie, PVCs,Secrets,Snapshots) intact.
 	// In operator, create dormantdatabase
-	if mysql.Spec.TerminationPolicy == api.TerminationPolicyPause {
-		if err := c.removeOwnerReferenceFromOffshoots(mysql, ref); err != nil {
+	if mariadb.Spec.TerminationPolicy == api.TerminationPolicyPause {
+		if err := c.removeOwnerReferenceFromOffshoots(mariadb, ref); err != nil {
 			return err
 		}
 
-		if _, err := c.createDormantDatabase(mysql); err != nil {
+		if _, err := c.createDormantDatabase(mariadb); err != nil {
 			if kerr.IsAlreadyExists(err) {
 				// if already exists, check if it is database of another Kind and return error in that case.
 				// If the Kind is same, we can safely assume that the DormantDB was not deleted in before,
 				// Probably because, User is more faster (create-delete-create-again-delete...) than operator!
 				// So reuse that DormantDB!
-				ddb, err := c.ExtClient.KubedbV1alpha1().DormantDatabases(mysql.Namespace).Get(mysql.Name, metav1.GetOptions{})
+				ddb, err := c.ExtClient.KubedbV1alpha1().DormantDatabases(mariadb.Namespace).Get(mariadb.Name, metav1.GetOptions{})
 				if err != nil {
 					return err
 				}
-				if val, _ := meta_util.GetStringValue(ddb.Labels, api.LabelDatabaseKind); val != api.ResourceKindMySQL {
-					return fmt.Errorf(`DormantDatabase "%v" of kind %v already exists`, mysql.Name, val)
+				if val, _ := meta_util.GetStringValue(ddb.Labels, api.LabelDatabaseKind); val != api.ResourceKindMariaDB {
+					return fmt.Errorf(`DormantDatabase "%v" of kind %v already exists`, mariadb.Name, val)
 				}
 			} else {
-				return fmt.Errorf(`failed to create DormantDatabase: "%v/%v". Reason: %v`, mysql.Namespace, mysql.Name, err)
+				return fmt.Errorf(`failed to create DormantDatabase: "%v/%v". Reason: %v`, mariadb.Namespace, mariadb.Name, err)
 			}
 		}
 	} else {
 		// If TerminationPolicy is "wipeOut", delete everything (ie, PVCs,Secrets,Snapshots).
 		// If TerminationPolicy is "delete", delete PVCs and keep snapshots,secrets intact.
 		// In both these cases, don't create dormantdatabase
-		if err := c.setOwnerReferenceToOffshoots(mysql, ref); err != nil {
+		if err := c.setOwnerReferenceToOffshoots(mariadb, ref); err != nil {
 			return err
 		}
 	}
 
-	c.cronController.StopBackupScheduling(mysql.ObjectMeta)
+	c.cronController.StopBackupScheduling(mariadb.ObjectMeta)
 
-	if mysql.Spec.Monitor != nil {
-		if _, err := c.deleteMonitor(mysql); err != nil {
+	if mariadb.Spec.Monitor != nil {
+		if _, err := c.deleteMonitor(mariadb); err != nil {
 			log.Errorln(err)
 			return nil
 		}
@@ -294,21 +294,21 @@ func (c *Controller) terminate(mysql *api.MySQL) error {
 	return nil
 }
 
-func (c *Controller) setOwnerReferenceToOffshoots(mysql *api.MySQL, ref *core.ObjectReference) error {
-	selector := labels.SelectorFromSet(mysql.OffshootSelectors())
+func (c *Controller) setOwnerReferenceToOffshoots(mariadb *api.MariaDB, ref *core.ObjectReference) error {
+	selector := labels.SelectorFromSet(mariadb.OffshootSelectors())
 
 	// If TerminationPolicy is "wipeOut", delete snapshots and secrets,
 	// else, keep it intact.
-	if mysql.Spec.TerminationPolicy == api.TerminationPolicyWipeOut {
+	if mariadb.Spec.TerminationPolicy == api.TerminationPolicyWipeOut {
 		if err := dynamic_util.EnsureOwnerReferenceForSelector(
 			c.DynamicClient,
 			api.SchemeGroupVersion.WithResource(api.ResourcePluralSnapshot),
-			mysql.Namespace,
+			mariadb.Namespace,
 			selector,
 			ref); err != nil {
 			return err
 		}
-		if err := c.wipeOutDatabase(mysql.ObjectMeta, mysql.Spec.GetSecrets(), ref); err != nil {
+		if err := c.wipeOutDatabase(mariadb.ObjectMeta, mariadb.Spec.GetSecrets(), ref); err != nil {
 			return errors.Wrap(err, "error in wiping out database.")
 		}
 	} else {
@@ -316,7 +316,7 @@ func (c *Controller) setOwnerReferenceToOffshoots(mysql *api.MySQL, ref *core.Ob
 		if err := dynamic_util.RemoveOwnerReferenceForSelector(
 			c.DynamicClient,
 			api.SchemeGroupVersion.WithResource(api.ResourcePluralSnapshot),
-			mysql.Namespace,
+			mariadb.Namespace,
 			selector,
 			ref); err != nil {
 			return err
@@ -324,8 +324,8 @@ func (c *Controller) setOwnerReferenceToOffshoots(mysql *api.MySQL, ref *core.Ob
 		if err := dynamic_util.RemoveOwnerReferenceForItems(
 			c.DynamicClient,
 			core.SchemeGroupVersion.WithResource("secrets"),
-			mysql.Namespace,
-			mysql.Spec.GetSecrets(),
+			mariadb.Namespace,
+			mariadb.Spec.GetSecrets(),
 			ref); err != nil {
 			return err
 		}
@@ -334,19 +334,19 @@ func (c *Controller) setOwnerReferenceToOffshoots(mysql *api.MySQL, ref *core.Ob
 	return dynamic_util.EnsureOwnerReferenceForSelector(
 		c.DynamicClient,
 		core.SchemeGroupVersion.WithResource("persistentvolumeclaims"),
-		mysql.Namespace,
+		mariadb.Namespace,
 		selector,
 		ref)
 }
 
-func (c *Controller) removeOwnerReferenceFromOffshoots(mysql *api.MySQL, ref *core.ObjectReference) error {
+func (c *Controller) removeOwnerReferenceFromOffshoots(mariadb *api.MariaDB, ref *core.ObjectReference) error {
 	// First, Get LabelSelector for Other Components
-	labelSelector := labels.SelectorFromSet(mysql.OffshootSelectors())
+	labelSelector := labels.SelectorFromSet(mariadb.OffshootSelectors())
 
 	if err := dynamic_util.RemoveOwnerReferenceForSelector(
 		c.DynamicClient,
 		api.SchemeGroupVersion.WithResource(api.ResourcePluralSnapshot),
-		mysql.Namespace,
+		mariadb.Namespace,
 		labelSelector,
 		ref); err != nil {
 		return err
@@ -354,7 +354,7 @@ func (c *Controller) removeOwnerReferenceFromOffshoots(mysql *api.MySQL, ref *co
 	if err := dynamic_util.RemoveOwnerReferenceForSelector(
 		c.DynamicClient,
 		core.SchemeGroupVersion.WithResource("persistentvolumeclaims"),
-		mysql.Namespace,
+		mariadb.Namespace,
 		labelSelector,
 		ref); err != nil {
 		return err
@@ -362,8 +362,8 @@ func (c *Controller) removeOwnerReferenceFromOffshoots(mysql *api.MySQL, ref *co
 	if err := dynamic_util.RemoveOwnerReferenceForItems(
 		c.DynamicClient,
 		core.SchemeGroupVersion.WithResource("secrets"),
-		mysql.Namespace,
-		mysql.Spec.GetSecrets(),
+		mariadb.Namespace,
+		mariadb.Spec.GetSecrets(),
 		ref); err != nil {
 		return err
 	}

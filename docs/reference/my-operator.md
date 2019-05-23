@@ -25,6 +25,6 @@
 
 ### SEE ALSO
 
-* [maria-operator run](maria-operator_run.md)	 - Launch MySQL server
+* [maria-operator run](maria-operator_run.md)	 - Launch MariaDB server
 * [maria-operator version](maria-operator_version.md)	 - Prints binary version number.
 

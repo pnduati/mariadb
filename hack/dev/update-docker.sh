@@ -80,23 +80,23 @@ echo ""
 if [ "$DB_UPDATE" -eq 1 ]; then
   cowsay -f tux "Processing database images" || true
   for db in "${dbversions[@]}"; do
-    ${REPO_ROOT}/hack/docker/mysql/${db}/make.sh build
-    ${REPO_ROOT}/hack/docker/mysql/${db}/make.sh push
+    ${REPO_ROOT}/hack/docker/mariadb/${db}/make.sh build
+    ${REPO_ROOT}/hack/docker/mariadb/${db}/make.sh push
   done
 fi
 
 if [ "$TOOLS_UPDATE" -eq 1 ]; then
   cowsay -f tux "Processing database-tools images" || true
   for db in "${dbversions[@]}"; do
-    ${REPO_ROOT}/hack/docker/mysql-tools/${db}/make.sh build
-    ${REPO_ROOT}/hack/docker/mysql-tools/${db}/make.sh push
+    ${REPO_ROOT}/hack/docker/mariadb-tools/${db}/make.sh build
+    ${REPO_ROOT}/hack/docker/mariadb-tools/${db}/make.sh push
   done
 fi
 
 if [ "$EXPORTER_UPDATE" -eq 1 ]; then
   cowsay -f tux "Processing database-exporter images" || true
   for exporter in "${exporters[@]}"; do
-    ${REPO_ROOT}/hack/docker/mysqld-exporter/${exporter}/make.sh
+    ${REPO_ROOT}/hack/docker/mariadbd-exporter/${exporter}/make.sh
   done
 fi
 

@@ -9,13 +9,13 @@
 #   BASE_SERVER_ID      = server-id of the primary member
 #   GOV_SVC             = the name of the governing service
 #   POD_NAMESPACE       = the Pods' namespace
-#   MYSQL_ROOT_USERNAME = root user name
-#   MYSQL_ROOT_PASSWORD = root password
+#   MARIADB_ROOT_USERNAME = root user name
+#   MARIADB_ROOT_PASSWORD = root password
 
 script_name=${0##*/}
 NAMESPACE="$POD_NAMESPACE"
-USER="$MYSQL_ROOT_USERNAME"
-PASSWORD="$MYSQL_ROOT_PASSWORD"
+USER="$MARIADB_ROOT_USERNAME"
+PASSWORD="$MARIADB_ROOT_PASSWORD"
 
 function timestamp() {
   date +"%Y/%m/%d %T"
@@ -51,7 +51,7 @@ while read -ra line; do
 done
 log "INFO" "Trying to start group with peers'${peers[*]}'"
 
-# store the value for the variables those will be written in /etc/mysql/my.cnf file
+# store the value for the variables those will be written in /etc/mariadb/my.cnf file
 
 # comma separated host names
 export hosts=$(echo -n ${peers[*]} | sed -e "s/ /,/g")
@@ -66,8 +66,8 @@ declare -i srv_id=$(hostname | sed -e "s/${BASE_NAME}-//g")
 export cur_addr="${cur_host}:33060"
 
 # Get ip_whitelist
-# https://dev.mysql.com/doc/refman/5.7/en/group-replication-options.html#sysvar_group_replication_ip_whitelist
-# https://dev.mysql.com/doc/refman/5.7/en/group-replication-ip-address-whitelisting.html
+# https://dev.mariadb.com/doc/refman/5.7/en/group-replication-options.html#sysvar_group_replication_ip_whitelist
+# https://dev.mariadb.com/doc/refman/5.7/en/group-replication-ip-address-whitelisting.html
 #
 # Command $(hostname -I) returns a space separated IP list. We need only the first one.
 myips=$(hostname -I)
@@ -75,13 +75,13 @@ first=${myips%% *}
 # Now use this IP with CIDR notation
 export whitelist="${first}/16"
 
-# the mysqld configurations have take by following
-# 01. official doc: https://dev.mysql.com/doc/refman/5.7/en/group-replication-configuring-instances.html
-# 02. digitalocean doc: https://www.digitalocean.com/community/tutorials/how-to-configure-mysql-group-replication-on-ubuntu-16-04
-log "INFO" "Storing default mysqld config into /etc/mysql/my.cnf"
-cat >>/etc/mysql/my.cnf <<EOL
+# the mariadbd configurations have take by following
+# 01. official doc: https://dev.mariadb.com/doc/refman/5.7/en/group-replication-configuring-instances.html
+# 02. digitalocean doc: https://www.digitalocean.com/community/tutorials/how-to-configure-mariadb-group-replication-on-ubuntu-16-04
+log "INFO" "Storing default mariadbd config into /etc/mariadb/my.cnf"
+cat >>/etc/mariadb/my.cnf <<EOL
 
-[mysqld]
+[mariadbd]
 
 # General replication settings
 gtid_mode = ON
@@ -116,21 +116,21 @@ report_host = "${cur_host}"
 loose-group_replication_local_address = "${cur_addr}"
 EOL
 
-log "INFO" "Starting mysql server with 'docker-entrypoint.sh mysqld $@'..."
+log "INFO" "Starting mariadb server with 'docker-entrypoint.sh mariadbd $@'..."
 
-# ensure the mysqld process be stopped
-/etc/init.d/mysql stop
+# ensure the mariadbd process be stopped
+/etc/init.d/mariadb stop
 
-# run the mysqld process in background with user provided arguments if any
-docker-entrypoint.sh mysqld $@ &
+# run the mariadbd process in background with user provided arguments if any
+docker-entrypoint.sh mariadbd $@ &
 pid=$!
-log "INFO" "The process id of mysqld is '$pid'"
+log "INFO" "The process id of mariadbd is '$pid'"
 
-# wait for all mysql servers be running (alive)
+# wait for all mariadb servers be running (alive)
 for host in ${peers[*]}; do
   for i in {900..0}; do
-    out=$(mysqladmin -u ${USER} --password=${PASSWORD} --host=${host} ping 2>/dev/null)
-    if [[ "$out" == "mysqld is alive" ]]; then
+    out=$(mariadbadmin -u ${USER} --password=${PASSWORD} --host=${host} ping 2>/dev/null)
+    if [[ "$out" == "mariadbd is alive" ]]; then
       break
     fi
 
@@ -149,23 +149,23 @@ log "INFO" "All servers (${peers[*]}) are ready"
 
 # now we need to configure a replication user for each server.
 # the procedures for this have been taken by following
-# 01. official doc (section from 17.2.1.3 to 17.2.1.5): https://dev.mysql.com/doc/refman/5.7/en/group-replication-user-credentials.html
-# 02. digitalocean doc: https://www.digitalocean.com/community/tutorials/how-to-configure-mysql-group-replication-on-ubuntu-16-04
+# 01. official doc (section from 17.2.1.3 to 17.2.1.5): https://dev.mariadb.com/doc/refman/5.7/en/group-replication-user-credentials.html
+# 02. digitalocean doc: https://www.digitalocean.com/community/tutorials/how-to-configure-mariadb-group-replication-on-ubuntu-16-04
 #####################################################################
 # Begin initialization process                                      #
 #####################################################################
-export mysql_header="mysql -u ${USER}"
+export mariadb_header="mariadb -u ${USER}"
 
 # this is to bypass the warning message for using password
-export MYSQL_PWD=${PASSWORD}
+export MARIADB_PWD=${PASSWORD}
 export member_hosts=($(echo -n ${hosts} | sed -e "s/,/ /g"))
 
 for host in ${member_hosts[*]}; do
   log "INFO" "Initializing the server (${host})..."
 
-  mysql="$mysql_header --host=$host"
+  mariadb="$mariadb_header --host=$host"
 
-  out=$(${mysql} -N -e "select count(host) from mysql.user where mysql.user.user='repl';" | awk '{print$1}')
+  out=$(${mariadb} -N -e "select count(host) from mariadb.user where mariadb.user.user='repl';" | awk '{print$1}')
   if [[ "$out" -eq "0" ]]; then
 
     # is_new is an array,
@@ -176,23 +176,23 @@ for host in ${member_hosts[*]}; do
     is_new=("${is_new[@]}" "1")
 
     log "INFO" "Replication user not found and creating one..."
-    ${mysql} -N -e "SET SQL_LOG_BIN=0;"
-    ${mysql} -N -e "CREATE USER 'repl'@'%' IDENTIFIED BY 'password' REQUIRE SSL;"
-    ${mysql} -N -e "GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';"
-    ${mysql} -N -e "FLUSH PRIVILEGES;"
-    ${mysql} -N -e "SET SQL_LOG_BIN=1;"
+    ${mariadb} -N -e "SET SQL_LOG_BIN=0;"
+    ${mariadb} -N -e "CREATE USER 'repl'@'%' IDENTIFIED BY 'password' REQUIRE SSL;"
+    ${mariadb} -N -e "GRANT REPLICATION SLAVE ON *.* TO 'repl'@'%';"
+    ${mariadb} -N -e "FLUSH PRIVILEGES;"
+    ${mariadb} -N -e "SET SQL_LOG_BIN=1;"
 
-    ${mysql} -N -e "CHANGE MASTER TO MASTER_USER='repl', MASTER_PASSWORD='password' FOR CHANNEL 'group_replication_recovery';"
+    ${mariadb} -N -e "CHANGE MASTER TO MASTER_USER='repl', MASTER_PASSWORD='password' FOR CHANNEL 'group_replication_recovery';"
   else
     log "INFO" "Replication user info exists"
     is_new=("${is_new[@]}" "0")
   fi
 
   # ensure the group replication plugin be installed
-  out=$(${mysql} -N -e 'SHOW PLUGINS;' | grep group_replication)
+  out=$(${mariadb} -N -e 'SHOW PLUGINS;' | grep group_replication)
   if [[ -z "$out" ]]; then
     log "INFO" "Installing group replication plugin..."
-    ${mysql} -e "INSTALL PLUGIN group_replication SONAME 'group_replication.so';"
+    ${mariadb} -e "INSTALL PLUGIN group_replication SONAME 'group_replication.so';"
   else
     log "INFO" "Already group replication plugin is installed"
   fi
@@ -206,16 +206,16 @@ function find_group() {
   group_found=0
   for host in $@; do
 
-    export mysql="$mysql_header --host=${host}"
+    export mariadb="$mariadb_header --host=${host}"
     # value may be 'UNDEFINED'
-    primary_id=$(${mysql} -N -e "SHOW STATUS WHERE Variable_name = 'group_replication_primary_member';" | awk '{print $2}')
+    primary_id=$(${mariadb} -N -e "SHOW STATUS WHERE Variable_name = 'group_replication_primary_member';" | awk '{print $2}')
     if [[ -n "$primary_id" ]]; then
-      ids=($(${mysql} -N -e "SELECT MEMBER_ID FROM performance_schema.replication_group_members WHERE MEMBER_STATE = 'ONLINE' OR MEMBER_STATE = 'RECOVERING';"))
+      ids=($(${mariadb} -N -e "SELECT MEMBER_ID FROM performance_schema.replication_group_members WHERE MEMBER_STATE = 'ONLINE' OR MEMBER_STATE = 'RECOVERING';"))
 
       for id in ${ids[@]}; do
         if [[ "${primary_id}" == "${id}" ]]; then
           group_found=1
-          primary_host=$(${mysql} -N -e "SELECT MEMBER_HOST FROM performance_schema.replication_group_members WHERE MEMBER_ID = '${primary_id}';" | awk '{print $1}')
+          primary_host=$(${mariadb} -N -e "SELECT MEMBER_HOST FROM performance_schema.replication_group_members WHERE MEMBER_ID = '${primary_id}';" | awk '{print $1}')
 
           break
         fi
@@ -246,24 +246,24 @@ primary_idx=$(echo ${primary_host} | sed -e "s/.${GOV_SVC}.${NAMESPACE}//g" | se
 #####################################################################
 
 if [[ "$found" == "0" ]]; then
-  mysql="$mysql_header --host=$primary_host"
+  mariadb="$mariadb_header --host=$primary_host"
 
   # get the member state from performance_schema.replication_group_members
-  out=$(${mysql} -N -e "SELECT MEMBER_STATE FROM performance_schema.replication_group_members WHERE MEMBER_HOST = '$primary_host';")
+  out=$(${mariadb} -N -e "SELECT MEMBER_STATE FROM performance_schema.replication_group_members WHERE MEMBER_HOST = '$primary_host';")
   if [[ -z "$out" || "$out" == "OFFLINE" ]]; then
     log "INFO" "No group is found and bootstrapping one on host '$primary_host'..."
 
-    ${mysql} -N -e "STOP GROUP_REPLICATION;"
+    ${mariadb} -N -e "STOP GROUP_REPLICATION;"
 
     # reset is needed for the first time creation
     if [[ "${is_new[$primary_idx]}" -eq "1" ]]; then
       log "INFO" "RESET MASTER in primary host $primary_host..."
-      ${mysql} -N -e "RESET MASTER;"
+      ${mariadb} -N -e "RESET MASTER;"
     fi
 
-    ${mysql} -N -e "SET GLOBAL group_replication_bootstrap_group=ON;"
-    ${mysql} -N -e "START GROUP_REPLICATION;"
-    ${mysql} -N -e "SET GLOBAL group_replication_bootstrap_group=OFF;"
+    ${mariadb} -N -e "SET GLOBAL group_replication_bootstrap_group=ON;"
+    ${mariadb} -N -e "START GROUP_REPLICATION;"
+    ${mariadb} -N -e "SET GLOBAL group_replication_bootstrap_group=OFF;"
 
     log "INFO" "A new group (name $GROUP_NAME) is bootstrapped on $primary_host"
 
@@ -287,23 +287,23 @@ declare -i host_idx=0
 for host in ${member_hosts[*]}; do
 
   if [[ "$host" != "$primary_host" ]]; then
-    mysql="$mysql_header --host=$host"
+    mariadb="$mariadb_header --host=$host"
 
     # get the member state from performance_schema.replication_group_members
-    out=$(${mysql} -N -e "SELECT MEMBER_STATE FROM performance_schema.replication_group_members WHERE MEMBER_HOST = '$host';")
+    out=$(${mariadb} -N -e "SELECT MEMBER_STATE FROM performance_schema.replication_group_members WHERE MEMBER_HOST = '$host';")
 
     if [[ -z "$out" || "$out" == "OFFLINE" ]]; then
       log "INFO" "Starting group replication on (${host})..."
 
-      ${mysql} -N -e "STOP GROUP_REPLICATION;"
+      ${mariadb} -N -e "STOP GROUP_REPLICATION;"
 
       # reset is needed for the first time creation
       if [[ "${is_new[$host_idx]}" -eq "1" ]]; then
         log "INFO" "RESET MASTER in host $host..."
-        ${mysql} -N -e "RESET MASTER;"
+        ${mariadb} -N -e "RESET MASTER;"
       fi
 
-      ${mysql} -N -e "START GROUP_REPLICATION;"
+      ${mariadb} -N -e "START GROUP_REPLICATION;"
 
       log "INFO" "$host is joined the group $GROUP_NAME"
 
@@ -318,6 +318,6 @@ done
 # End joining process                                               #
 #####################################################################
 
-# wait for mysqld process running in background
-log "INFO" "Waiting for mysqld server process running..."
+# wait for mariadbd process running in background
+log "INFO" "Waiting for mariadbd server process running..."
 wait $pid

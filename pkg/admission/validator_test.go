@@ -31,37 +31,37 @@ func init() {
 var requestKind = metaV1.GroupVersionKind{
 	Group:   api.SchemeGroupVersion.Group,
 	Version: api.SchemeGroupVersion.Version,
-	Kind:    api.ResourceKindMySQL,
+	Kind:    api.ResourceKindMariaDB,
 }
 
-func TestMySQLValidator_Admit(t *testing.T) {
+func TestMariaDBValidator_Admit(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.testName, func(t *testing.T) {
-			validator := MySQLValidator{}
+			validator := MariaDBValidator{}
 
 			validator.initialized = true
 			validator.extClient = extFake.NewSimpleClientset(
-				&catalog.MySQLVersion{
+				&catalog.MariaDBVersion{
 					ObjectMeta: metaV1.ObjectMeta{
 						Name: "8.0",
 					},
-					Spec: catalog.MySQLVersionSpec{
+					Spec: catalog.MariaDBVersionSpec{
 						Version: "8.0.0",
 					},
 				},
-				&catalog.MySQLVersion{
+				&catalog.MariaDBVersion{
 					ObjectMeta: metaV1.ObjectMeta{
 						Name: "5.6",
 					},
-					Spec: catalog.MySQLVersionSpec{
+					Spec: catalog.MariaDBVersionSpec{
 						Version: "5.6",
 					},
 				},
-				&catalog.MySQLVersion{
+				&catalog.MariaDBVersion{
 					ObjectMeta: metaV1.ObjectMeta{
 						Name: "5.7.25",
 					},
-					Spec: catalog.MySQLVersionSpec{
+					Spec: catalog.MariaDBVersionSpec{
 						Version: "5.7.25",
 					},
 				},
@@ -100,7 +100,7 @@ func TestMySQLValidator_Admit(t *testing.T) {
 			req.OldObject.Raw = oldObjJS
 
 			if c.heatUp {
-				if _, err := validator.extClient.KubedbV1alpha1().MySQLs(c.namespace).Create(&c.object); err != nil && !kerr.IsAlreadyExists(err) {
+				if _, err := validator.extClient.KubedbV1alpha1().MariaDBs(c.namespace).Create(&c.object); err != nil && !kerr.IsAlreadyExists(err) {
 					t.Errorf(err.Error())
 				}
 			}
@@ -132,48 +132,48 @@ var cases = []struct {
 	objectName string
 	namespace  string
 	operation  admission.Operation
-	object     api.MySQL
-	oldObject  api.MySQL
+	object     api.MariaDB
+	oldObject  api.MariaDB
 	heatUp     bool
 	result     bool
 }{
-	{"Create Valid MySQL",
+	{"Create Valid MariaDB",
 		requestKind,
 		"foo",
 		"default",
 		admission.Create,
-		sampleMySQL(),
-		api.MySQL{},
+		sampleMariaDB(),
+		api.MariaDB{},
 		false,
 		true,
 	},
-	{"Create Invalid MySQL",
+	{"Create Invalid MariaDB",
 		requestKind,
 		"foo",
 		"default",
 		admission.Create,
-		getAwkwardMySQL(),
-		api.MySQL{},
+		getAwkwardMariaDB(),
+		api.MariaDB{},
 		false,
 		false,
 	},
-	{"Edit MySQL Spec.DatabaseSecret with Existing Secret",
+	{"Edit MariaDB Spec.DatabaseSecret with Existing Secret",
 		requestKind,
 		"foo",
 		"default",
 		admission.Update,
-		editExistingSecret(sampleMySQL()),
-		sampleMySQL(),
+		editExistingSecret(sampleMariaDB()),
+		sampleMariaDB(),
 		false,
 		true,
 	},
-	{"Edit MySQL Spec.DatabaseSecret with non Existing Secret",
+	{"Edit MariaDB Spec.DatabaseSecret with non Existing Secret",
 		requestKind,
 		"foo",
 		"default",
 		admission.Update,
-		editNonExistingSecret(sampleMySQL()),
-		sampleMySQL(),
+		editNonExistingSecret(sampleMariaDB()),
+		sampleMariaDB(),
 		false,
 		true,
 	},
@@ -182,8 +182,8 @@ var cases = []struct {
 		"foo",
 		"default",
 		admission.Update,
-		editStatus(sampleMySQL()),
-		sampleMySQL(),
+		editStatus(sampleMariaDB()),
+		sampleMariaDB(),
 		false,
 		true,
 	},
@@ -192,8 +192,8 @@ var cases = []struct {
 		"foo",
 		"default",
 		admission.Update,
-		editSpecMonitor(sampleMySQL()),
-		sampleMySQL(),
+		editSpecMonitor(sampleMariaDB()),
+		sampleMariaDB(),
 		false,
 		true,
 	},
@@ -202,8 +202,8 @@ var cases = []struct {
 		"foo",
 		"default",
 		admission.Update,
-		editSpecInvalidMonitor(sampleMySQL()),
-		sampleMySQL(),
+		editSpecInvalidMonitor(sampleMariaDB()),
+		sampleMariaDB(),
 		false,
 		false,
 	},
@@ -212,50 +212,50 @@ var cases = []struct {
 		"foo",
 		"default",
 		admission.Update,
-		pauseDatabase(sampleMySQL()),
-		sampleMySQL(),
+		pauseDatabase(sampleMariaDB()),
+		sampleMariaDB(),
 		false,
 		true,
 	},
-	{"Delete MySQL when Spec.TerminationPolicy=DoNotTerminate",
+	{"Delete MariaDB when Spec.TerminationPolicy=DoNotTerminate",
 		requestKind,
 		"foo",
 		"default",
 		admission.Delete,
-		sampleMySQL(),
-		api.MySQL{},
+		sampleMariaDB(),
+		api.MariaDB{},
 		true,
 		false,
 	},
-	{"Delete MySQL when Spec.TerminationPolicy=Pause",
+	{"Delete MariaDB when Spec.TerminationPolicy=Pause",
 		requestKind,
 		"foo",
 		"default",
 		admission.Delete,
-		pauseDatabase(sampleMySQL()),
-		api.MySQL{},
+		pauseDatabase(sampleMariaDB()),
+		api.MariaDB{},
 		true,
 		true,
 	},
-	{"Delete Non Existing MySQL",
+	{"Delete Non Existing MariaDB",
 		requestKind,
 		"foo",
 		"default",
 		admission.Delete,
-		api.MySQL{},
-		api.MySQL{},
+		api.MariaDB{},
+		api.MariaDB{},
 		false,
 		true,
 	},
 
-	// For MySQL Group Replication
+	// For MariaDB Group Replication
 	{"Create valid group",
 		requestKind,
 		"foo",
 		"default",
 		admission.Create,
-		validGroup(sampleMySQL()),
-		api.MySQL{},
+		validGroup(sampleMariaDB()),
+		api.MariaDB{},
 		false,
 		true,
 	},
@@ -265,7 +265,7 @@ var cases = []struct {
 		"default",
 		admission.Create,
 		groupWithClusterModeNotSet(),
-		api.MySQL{},
+		api.MariaDB{},
 		false,
 		false,
 	},
@@ -275,7 +275,7 @@ var cases = []struct {
 		"default",
 		admission.Create,
 		groupWithInvalidClusterMode(),
-		api.MySQL{},
+		api.MariaDB{},
 		false,
 		false,
 	},
@@ -285,7 +285,7 @@ var cases = []struct {
 		"default",
 		admission.Create,
 		groupWithSingleReplica(),
-		api.MySQL{},
+		api.MariaDB{},
 		false,
 		false,
 	},
@@ -295,27 +295,27 @@ var cases = []struct {
 		"default",
 		admission.Create,
 		groupWithOverReplicas(),
-		api.MySQL{},
+		api.MariaDB{},
 		false,
 		false,
 	},
-	{"Create group with unsupported MySQL server version",
+	{"Create group with unsupported MariaDB server version",
 		requestKind,
 		"foo",
 		"default",
 		admission.Create,
 		groupWithUnsupportedServerVersion(),
-		api.MySQL{},
+		api.MariaDB{},
 		false,
 		true,
 	},
-	{"Create group with Non-tri formatted MySQL server version",
+	{"Create group with Non-tri formatted MariaDB server version",
 		requestKind,
 		"foo",
 		"default",
 		admission.Create,
 		groupWithNonTriFormattedServerVersion(),
-		api.MySQL{},
+		api.MariaDB{},
 		false,
 		true,
 	},
@@ -325,7 +325,7 @@ var cases = []struct {
 		"default",
 		admission.Create,
 		groupWithEmptyGroupName(),
-		api.MySQL{},
+		api.MariaDB{},
 		false,
 		false,
 	},
@@ -335,7 +335,7 @@ var cases = []struct {
 		"default",
 		admission.Create,
 		groupWithInvalidGroupName(),
-		api.MySQL{},
+		api.MariaDB{},
 		false,
 		false,
 	},
@@ -345,7 +345,7 @@ var cases = []struct {
 		"default",
 		admission.Create,
 		groupWithBaseServerIDZero(),
-		api.MySQL{},
+		api.MariaDB{},
 		false,
 		false,
 	},
@@ -355,26 +355,26 @@ var cases = []struct {
 		"default",
 		admission.Create,
 		groupWithBaseServerIDExceededMaxLimit(),
-		api.MySQL{},
+		api.MariaDB{},
 		false,
 		false,
 	},
 }
 
-func sampleMySQL() api.MySQL {
-	return api.MySQL{
+func sampleMariaDB() api.MariaDB {
+	return api.MariaDB{
 		TypeMeta: metaV1.TypeMeta{
-			Kind:       api.ResourceKindMySQL,
+			Kind:       api.ResourceKindMariaDB,
 			APIVersion: api.SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metaV1.ObjectMeta{
 			Name:      "foo",
 			Namespace: "default",
 			Labels: map[string]string{
-				api.LabelDatabaseKind: api.ResourceKindMySQL,
+				api.LabelDatabaseKind: api.ResourceKindMariaDB,
 			},
 		},
-		Spec: api.MySQLSpec{
+		Spec: api.MariaDBSpec{
 			Version:     "8.0",
 			Replicas:    types.Int32P(1),
 			StorageType: api.StorageTypeDurable,
@@ -404,34 +404,34 @@ func sampleMySQL() api.MySQL {
 	}
 }
 
-func getAwkwardMySQL() api.MySQL {
-	mysql := sampleMySQL()
-	mysql.Spec.Version = "3.0"
-	return mysql
+func getAwkwardMariaDB() api.MariaDB {
+	mariadb := sampleMariaDB()
+	mariadb.Spec.Version = "3.0"
+	return mariadb
 }
 
-func editExistingSecret(old api.MySQL) api.MySQL {
+func editExistingSecret(old api.MariaDB) api.MariaDB {
 	old.Spec.DatabaseSecret = &core.SecretVolumeSource{
 		SecretName: "foo-auth",
 	}
 	return old
 }
 
-func editNonExistingSecret(old api.MySQL) api.MySQL {
+func editNonExistingSecret(old api.MariaDB) api.MariaDB {
 	old.Spec.DatabaseSecret = &core.SecretVolumeSource{
 		SecretName: "foo-auth-fused",
 	}
 	return old
 }
 
-func editStatus(old api.MySQL) api.MySQL {
-	old.Status = api.MySQLStatus{
+func editStatus(old api.MariaDB) api.MariaDB {
+	old.Status = api.MariaDBStatus{
 		Phase: api.DatabasePhaseCreating,
 	}
 	return old
 }
 
-func editSpecMonitor(old api.MySQL) api.MySQL {
+func editSpecMonitor(old api.MariaDB) api.MariaDB {
 	old.Spec.Monitor = &mona.AgentSpec{
 		Agent: mona.AgentPrometheusBuiltin,
 		Prometheus: &mona.PrometheusSpec{
@@ -442,100 +442,100 @@ func editSpecMonitor(old api.MySQL) api.MySQL {
 }
 
 // should be failed because more fields required for COreOS Monitoring
-func editSpecInvalidMonitor(old api.MySQL) api.MySQL {
+func editSpecInvalidMonitor(old api.MariaDB) api.MariaDB {
 	old.Spec.Monitor = &mona.AgentSpec{
 		Agent: mona.AgentCoreOSPrometheus,
 	}
 	return old
 }
 
-func pauseDatabase(old api.MySQL) api.MySQL {
+func pauseDatabase(old api.MariaDB) api.MariaDB {
 	old.Spec.TerminationPolicy = api.TerminationPolicyPause
 	return old
 }
 
-func validGroup(old api.MySQL) api.MySQL {
-	old.Spec.Version = api.MySQLGRRecommendedVersion
-	old.Spec.Replicas = types.Int32P(api.MySQLDefaultGroupSize)
-	clusterMode := api.MySQLClusterModeGroup
-	old.Spec.Topology = &api.MySQLClusterTopology{
+func validGroup(old api.MariaDB) api.MariaDB {
+	old.Spec.Version = api.MariaDBGRRecommendedVersion
+	old.Spec.Replicas = types.Int32P(api.MariaDBDefaultGroupSize)
+	clusterMode := api.MariaDBClusterModeGroup
+	old.Spec.Topology = &api.MariaDBClusterTopology{
 		Mode: &clusterMode,
-		Group: &api.MySQLGroupSpec{
+		Group: &api.MariaDBGroupSpec{
 			Name:         "dc002fc3-c412-4d18-b1d4-66c1fbfbbc9b",
-			BaseServerID: types.UIntP(api.MySQLDefaultBaseServerID),
+			BaseServerID: types.UIntP(api.MariaDBDefaultBaseServerID),
 		},
 	}
 
 	return old
 }
 
-func groupWithClusterModeNotSet() api.MySQL {
-	old := validGroup(sampleMySQL())
+func groupWithClusterModeNotSet() api.MariaDB {
+	old := validGroup(sampleMariaDB())
 	old.Spec.Topology.Mode = nil
 
 	return old
 }
 
-func groupWithInvalidClusterMode() api.MySQL {
-	old := validGroup(sampleMySQL())
-	gr := api.MySQLClusterMode("groupReplication")
+func groupWithInvalidClusterMode() api.MariaDB {
+	old := validGroup(sampleMariaDB())
+	gr := api.MariaDBClusterMode("groupReplication")
 	old.Spec.Topology.Mode = &gr
 
 	return old
 }
 
-func groupWithSingleReplica() api.MySQL {
-	old := validGroup(sampleMySQL())
+func groupWithSingleReplica() api.MariaDB {
+	old := validGroup(sampleMariaDB())
 	old.Spec.Replicas = types.Int32P(1)
 
 	return old
 }
 
-func groupWithOverReplicas() api.MySQL {
-	old := validGroup(sampleMySQL())
-	old.Spec.Replicas = types.Int32P(api.MySQLMaxGroupMembers + 1)
+func groupWithOverReplicas() api.MariaDB {
+	old := validGroup(sampleMariaDB())
+	old.Spec.Replicas = types.Int32P(api.MariaDBMaxGroupMembers + 1)
 
 	return old
 }
 
-func groupWithUnsupportedServerVersion() api.MySQL {
-	old := validGroup(sampleMySQL())
+func groupWithUnsupportedServerVersion() api.MariaDB {
+	old := validGroup(sampleMariaDB())
 	old.Spec.Version = "8.0"
 
 	return old
 }
 
-func groupWithNonTriFormattedServerVersion() api.MySQL {
-	old := validGroup(sampleMySQL())
+func groupWithNonTriFormattedServerVersion() api.MariaDB {
+	old := validGroup(sampleMariaDB())
 	old.Spec.Version = "5.6"
 
 	return old
 }
 
-func groupWithEmptyGroupName() api.MySQL {
-	old := validGroup(sampleMySQL())
+func groupWithEmptyGroupName() api.MariaDB {
+	old := validGroup(sampleMariaDB())
 	old.Spec.Topology.Group.Name = ""
 
 	return old
 }
 
-func groupWithInvalidGroupName() api.MySQL {
-	old := validGroup(sampleMySQL())
+func groupWithInvalidGroupName() api.MariaDB {
+	old := validGroup(sampleMariaDB())
 	old.Spec.Topology.Group.Name = "a-a-a-a-a"
 
 	return old
 }
 
-func groupWithBaseServerIDZero() api.MySQL {
-	old := validGroup(sampleMySQL())
+func groupWithBaseServerIDZero() api.MariaDB {
+	old := validGroup(sampleMariaDB())
 	old.Spec.Topology.Group.BaseServerID = types.UIntP(0)
 
 	return old
 }
 
-func groupWithBaseServerIDExceededMaxLimit() api.MySQL {
-	old := validGroup(sampleMySQL())
-	old.Spec.Topology.Group.BaseServerID = types.UIntP(api.MySQLMaxBaseServerID + 1)
+func groupWithBaseServerIDExceededMaxLimit() api.MariaDB {
+	old := validGroup(sampleMariaDB())
+	old.Spec.Topology.Group.BaseServerID = types.UIntP(api.MariaDBMaxBaseServerID + 1)
 
 	return old
 }

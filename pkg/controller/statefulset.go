@@ -22,13 +22,13 @@ import (
 	mona "kmodules.xyz/monitoring-agent-api/api/v1"
 )
 
-func (c *Controller) ensureStatefulSet(mysql *api.MySQL) (kutil.VerbType, error) {
-	if err := c.checkStatefulSet(mysql); err != nil {
+func (c *Controller) ensureStatefulSet(mariadb *api.MariaDB) (kutil.VerbType, error) {
+	if err := c.checkStatefulSet(mariadb); err != nil {
 		return kutil.VerbUnchanged, err
 	}
 
-	// Create statefulSet for MySQL database
-	statefulSet, vt, err := c.createStatefulSet(mysql)
+	// Create statefulSet for MariaDB database
+	statefulSet, vt, err := c.createStatefulSet(mariadb)
 	if err != nil {
 		return kutil.VerbUnchanged, err
 	}
@@ -39,7 +39,7 @@ func (c *Controller) ensureStatefulSet(mysql *api.MySQL) (kutil.VerbType, error)
 			return kutil.VerbUnchanged, err
 		}
 		c.recorder.Eventf(
-			mysql,
+			mariadb,
 			core.EventTypeNormal,
 			eventer.EventReasonSuccessful,
 			"Successfully %v StatefulSet",
@@ -49,9 +49,9 @@ func (c *Controller) ensureStatefulSet(mysql *api.MySQL) (kutil.VerbType, error)
 	return vt, nil
 }
 
-func (c *Controller) checkStatefulSet(mysql *api.MySQL) error {
-	// SatatefulSet for MySQL database
-	statefulSet, err := c.Client.AppsV1().StatefulSets(mysql.Namespace).Get(mysql.OffshootName(), metav1.GetOptions{})
+func (c *Controller) checkStatefulSet(mariadb *api.MariaDB) error {
+	// SatatefulSet for MariaDB database
+	statefulSet, err := c.Client.AppsV1().StatefulSets(mariadb.Namespace).Get(mariadb.OffshootName(), metav1.GetOptions{})
 	if err != nil {
 		if kerr.IsNotFound(err) {
 			return nil
@@ -59,91 +59,91 @@ func (c *Controller) checkStatefulSet(mysql *api.MySQL) error {
 		return err
 	}
 
-	if statefulSet.Labels[api.LabelDatabaseKind] != api.ResourceKindMySQL ||
-		statefulSet.Labels[api.LabelDatabaseName] != mysql.Name {
-		return fmt.Errorf(`intended statefulSet "%v/%v" already exists`, mysql.Namespace, mysql.OffshootName())
+	if statefulSet.Labels[api.LabelDatabaseKind] != api.ResourceKindMariaDB ||
+		statefulSet.Labels[api.LabelDatabaseName] != mariadb.Name {
+		return fmt.Errorf(`intended statefulSet "%v/%v" already exists`, mariadb.Namespace, mariadb.OffshootName())
 	}
 
 	return nil
 }
 
-func (c *Controller) createStatefulSet(mysql *api.MySQL) (*apps.StatefulSet, kutil.VerbType, error) {
+func (c *Controller) createStatefulSet(mariadb *api.MariaDB) (*apps.StatefulSet, kutil.VerbType, error) {
 	statefulSetMeta := metav1.ObjectMeta{
-		Name:      mysql.OffshootName(),
-		Namespace: mysql.Namespace,
+		Name:      mariadb.OffshootName(),
+		Namespace: mariadb.Namespace,
 	}
 
-	ref, rerr := reference.GetReference(clientsetscheme.Scheme, mysql)
+	ref, rerr := reference.GetReference(clientsetscheme.Scheme, mariadb)
 	if rerr != nil {
 		return nil, kutil.VerbUnchanged, rerr
 	}
 
-	mysqlVersion, err := c.ExtClient.CatalogV1alpha1().MySQLVersions().Get(string(mysql.Spec.Version), metav1.GetOptions{})
+	mariadbVersion, err := c.ExtClient.CatalogV1alpha1().MariaDBVersions().Get(string(mariadb.Spec.Version), metav1.GetOptions{})
 	if err != nil {
 		return nil, kutil.VerbUnchanged, rerr
 	}
 
 	return app_util.CreateOrPatchStatefulSet(c.Client, statefulSetMeta, func(in *apps.StatefulSet) *apps.StatefulSet {
-		in.Labels = mysql.OffshootLabels()
-		in.Annotations = mysql.Spec.PodTemplate.Controller.Annotations
+		in.Labels = mariadb.OffshootLabels()
+		in.Annotations = mariadb.Spec.PodTemplate.Controller.Annotations
 		core_util.EnsureOwnerReference(&in.ObjectMeta, ref)
 
-		in.Spec.Replicas = mysql.Spec.Replicas
+		in.Spec.Replicas = mariadb.Spec.Replicas
 		in.Spec.ServiceName = c.GoverningService
 		in.Spec.Selector = &metav1.LabelSelector{
-			MatchLabels: mysql.OffshootSelectors(),
+			MatchLabels: mariadb.OffshootSelectors(),
 		}
-		in.Spec.Template.Labels = mysql.OffshootSelectors()
-		in.Spec.Template.Annotations = mysql.Spec.PodTemplate.Annotations
+		in.Spec.Template.Labels = mariadb.OffshootSelectors()
+		in.Spec.Template.Annotations = mariadb.Spec.PodTemplate.Annotations
 		in.Spec.Template.Spec.InitContainers = core_util.UpsertContainers(
 			in.Spec.Template.Spec.InitContainers,
 			append(
 				[]core.Container{
 					{
 						Name:            "remove-lost-found",
-						Image:           mysqlVersion.Spec.InitContainer.Image,
+						Image:           mariadbVersion.Spec.InitContainer.Image,
 						ImagePullPolicy: core.PullIfNotPresent,
 						Command: []string{
 							"rm",
 							"-rf",
-							"/var/lib/mysql/lost+found",
+							"/var/lib/mariadb/lost+found",
 						},
 						VolumeMounts: []core.VolumeMount{
 							{
 								Name:      "data",
-								MountPath: "/var/lib/mysql",
+								MountPath: "/var/lib/mariadb",
 							},
 						},
-						Resources: mysql.Spec.PodTemplate.Spec.Resources,
+						Resources: mariadb.Spec.PodTemplate.Spec.Resources,
 					},
 				},
-				mysql.Spec.PodTemplate.Spec.InitContainers...,
+				mariadb.Spec.PodTemplate.Spec.InitContainers...,
 			),
 		)
 
 		container := core.Container{
-			Name:            api.ResourceSingularMySQL,
-			Image:           mysqlVersion.Spec.DB.Image,
+			Name:            api.ResourceSingularMariaDB,
+			Image:           mariadbVersion.Spec.DB.Image,
 			ImagePullPolicy: core.PullIfNotPresent,
-			Args:            mysql.Spec.PodTemplate.Spec.Args,
-			Resources:       mysql.Spec.PodTemplate.Spec.Resources,
-			LivenessProbe:   mysql.Spec.PodTemplate.Spec.LivenessProbe,
-			ReadinessProbe:  mysql.Spec.PodTemplate.Spec.ReadinessProbe,
-			Lifecycle:       mysql.Spec.PodTemplate.Spec.Lifecycle,
+			Args:            mariadb.Spec.PodTemplate.Spec.Args,
+			Resources:       mariadb.Spec.PodTemplate.Spec.Resources,
+			LivenessProbe:   mariadb.Spec.PodTemplate.Spec.LivenessProbe,
+			ReadinessProbe:  mariadb.Spec.PodTemplate.Spec.ReadinessProbe,
+			Lifecycle:       mariadb.Spec.PodTemplate.Spec.Lifecycle,
 			Ports: []core.ContainerPort{
 				{
 					Name:          "db",
-					ContainerPort: api.MySQLNodePort,
+					ContainerPort: api.MariaDBNodePort,
 					Protocol:      core.ProtocolTCP,
 				},
 			},
 		}
-		if mysql.Spec.Topology != nil && mysql.Spec.Topology.Mode != nil &&
-			*mysql.Spec.Topology.Mode == api.MySQLClusterModeGroup {
+		if mariadb.Spec.Topology != nil && mariadb.Spec.Topology.Mode != nil &&
+			*mariadb.Spec.Topology.Mode == api.MariaDBClusterModeGroup {
 			container.Command = []string{
 				"peer-finder",
 			}
-			userProvidedArgs := strings.Join(mysql.Spec.PodTemplate.Spec.Args, " ")
+			userProvidedArgs := strings.Join(mariadb.Spec.PodTemplate.Spec.Args, " ")
 			container.Args = []string{
 				fmt.Sprintf("-service=%s", c.GoverningService),
 				fmt.Sprintf("-on-start=/on-start.sh %s", userProvidedArgs),
@@ -157,7 +157,7 @@ func (c *Controller) createStatefulSet(mysql *api.MySQL) (*apps.StatefulSet, kut
 		}
 		in.Spec.Template.Spec.Containers = core_util.UpsertContainer(in.Spec.Template.Spec.Containers, container)
 
-		if mysql.GetMonitoringVendor() == mona.VendorPrometheus {
+		if mariadb.GetMonitoringVendor() == mona.VendorPrometheus {
 			in.Spec.Template.Spec.Containers = core_util.UpsertContainer(in.Spec.Template.Spec.Containers, core.Container{
 				Name: "exporter",
 				Command: []string{
@@ -166,68 +166,68 @@ func (c *Controller) createStatefulSet(mysql *api.MySQL) (*apps.StatefulSet, kut
 				Args: []string{
 					"-c",
 					// DATA_SOURCE_NAME=user:password@tcp(localhost:5555)/dbname
-					// ref: https://github.com/prometheus/mysqld_exporter#setting-the-mysql-servers-data-source-name
-					fmt.Sprintf(`export DATA_SOURCE_NAME="${MYSQL_ROOT_USERNAME:-}:${MYSQL_ROOT_PASSWORD:-}@(127.0.0.1:3306)/"
-						/bin/mysqld_exporter --web.listen-address=:%v --web.telemetry-path=%v %v`,
-						mysql.Spec.Monitor.Prometheus.Port, mysql.StatsService().Path(), strings.Join(mysql.Spec.Monitor.Args, " ")),
+					// ref: https://github.com/prometheus/mariadbd_exporter#setting-the-mariadb-servers-data-source-name
+					fmt.Sprintf(`export DATA_SOURCE_NAME="${MARIADB_ROOT_USERNAME:-}:${MARIADB_ROOT_PASSWORD:-}@(127.0.0.1:3306)/"
+						/bin/mariadbd_exporter --web.listen-address=:%v --web.telemetry-path=%v %v`,
+						mariadb.Spec.Monitor.Prometheus.Port, mariadb.StatsService().Path(), strings.Join(mariadb.Spec.Monitor.Args, " ")),
 				},
-				Image: mysqlVersion.Spec.Exporter.Image,
+				Image: mariadbVersion.Spec.Exporter.Image,
 				Ports: []core.ContainerPort{
 					{
 						Name:          api.PrometheusExporterPortName,
 						Protocol:      core.ProtocolTCP,
-						ContainerPort: mysql.Spec.Monitor.Prometheus.Port,
+						ContainerPort: mariadb.Spec.Monitor.Prometheus.Port,
 					},
 				},
-				Env:             mysql.Spec.Monitor.Env,
-				Resources:       mysql.Spec.Monitor.Resources,
-				SecurityContext: mysql.Spec.Monitor.SecurityContext,
+				Env:             mariadb.Spec.Monitor.Env,
+				Resources:       mariadb.Spec.Monitor.Resources,
+				SecurityContext: mariadb.Spec.Monitor.SecurityContext,
 			})
 		}
-		// Set Admin Secret as MYSQL_ROOT_PASSWORD env variable
-		in = upsertEnv(in, mysql)
-		in = upsertDataVolume(in, mysql)
-		in = upsertCustomConfig(in, mysql)
+		// Set Admin Secret as MARIADB_ROOT_PASSWORD env variable
+		in = upsertEnv(in, mariadb)
+		in = upsertDataVolume(in, mariadb)
+		in = upsertCustomConfig(in, mariadb)
 
-		if mysql.Spec.Init != nil && mysql.Spec.Init.ScriptSource != nil {
-			in = upsertInitScript(in, mysql.Spec.Init.ScriptSource.VolumeSource)
+		if mariadb.Spec.Init != nil && mariadb.Spec.Init.ScriptSource != nil {
+			in = upsertInitScript(in, mariadb.Spec.Init.ScriptSource.VolumeSource)
 		}
 
-		in.Spec.Template.Spec.NodeSelector = mysql.Spec.PodTemplate.Spec.NodeSelector
-		in.Spec.Template.Spec.Affinity = mysql.Spec.PodTemplate.Spec.Affinity
-		if mysql.Spec.PodTemplate.Spec.SchedulerName != "" {
-			in.Spec.Template.Spec.SchedulerName = mysql.Spec.PodTemplate.Spec.SchedulerName
+		in.Spec.Template.Spec.NodeSelector = mariadb.Spec.PodTemplate.Spec.NodeSelector
+		in.Spec.Template.Spec.Affinity = mariadb.Spec.PodTemplate.Spec.Affinity
+		if mariadb.Spec.PodTemplate.Spec.SchedulerName != "" {
+			in.Spec.Template.Spec.SchedulerName = mariadb.Spec.PodTemplate.Spec.SchedulerName
 		}
-		in.Spec.Template.Spec.Tolerations = mysql.Spec.PodTemplate.Spec.Tolerations
-		in.Spec.Template.Spec.ImagePullSecrets = mysql.Spec.PodTemplate.Spec.ImagePullSecrets
-		in.Spec.Template.Spec.PriorityClassName = mysql.Spec.PodTemplate.Spec.PriorityClassName
-		in.Spec.Template.Spec.Priority = mysql.Spec.PodTemplate.Spec.Priority
-		in.Spec.Template.Spec.SecurityContext = mysql.Spec.PodTemplate.Spec.SecurityContext
+		in.Spec.Template.Spec.Tolerations = mariadb.Spec.PodTemplate.Spec.Tolerations
+		in.Spec.Template.Spec.ImagePullSecrets = mariadb.Spec.PodTemplate.Spec.ImagePullSecrets
+		in.Spec.Template.Spec.PriorityClassName = mariadb.Spec.PodTemplate.Spec.PriorityClassName
+		in.Spec.Template.Spec.Priority = mariadb.Spec.PodTemplate.Spec.Priority
+		in.Spec.Template.Spec.SecurityContext = mariadb.Spec.PodTemplate.Spec.SecurityContext
 
 		if c.EnableRBAC {
-			in.Spec.Template.Spec.ServiceAccountName = mysql.OffshootName()
+			in.Spec.Template.Spec.ServiceAccountName = mariadb.OffshootName()
 		}
 
-		in.Spec.UpdateStrategy = mysql.Spec.UpdateStrategy
-		in = upsertUserEnv(in, mysql)
+		in.Spec.UpdateStrategy = mariadb.Spec.UpdateStrategy
+		in = upsertUserEnv(in, mariadb)
 
 		return in
 	})
 }
 
-func upsertDataVolume(statefulSet *apps.StatefulSet, mysql *api.MySQL) *apps.StatefulSet {
+func upsertDataVolume(statefulSet *apps.StatefulSet, mariadb *api.MariaDB) *apps.StatefulSet {
 	for i, container := range statefulSet.Spec.Template.Spec.Containers {
-		if container.Name == api.ResourceSingularMySQL {
+		if container.Name == api.ResourceSingularMariaDB {
 			volumeMount := core.VolumeMount{
 				Name:      "data",
-				MountPath: "/var/lib/mysql",
+				MountPath: "/var/lib/mariadb",
 			}
 			volumeMounts := container.VolumeMounts
 			volumeMounts = core_util.UpsertVolumeMount(volumeMounts, volumeMount)
 			statefulSet.Spec.Template.Spec.Containers[i].VolumeMounts = volumeMounts
 
-			pvcSpec := mysql.Spec.Storage
-			if mysql.Spec.StorageType == api.StorageTypeEphemeral {
+			pvcSpec := mariadb.Spec.Storage
+			if mariadb.Spec.StorageType == api.StorageTypeEphemeral {
 				ed := core.EmptyDirVolumeSource{}
 				if pvcSpec != nil {
 					if sz, found := pvcSpec.Resources.Requests[core.ResourceStorage]; found {
@@ -247,7 +247,7 @@ func upsertDataVolume(statefulSet *apps.StatefulSet, mysql *api.MySQL) *apps.Sta
 					pvcSpec.AccessModes = []core.PersistentVolumeAccessMode{
 						core.ReadWriteOnce,
 					}
-					log.Infof(`Using "%v" as AccessModes in mysql.Spec.Storage`, core.ReadWriteOnce)
+					log.Infof(`Using "%v" as AccessModes in mariadb.Spec.Storage`, core.ReadWriteOnce)
 				}
 
 				claim := core.PersistentVolumeClaim{
@@ -269,45 +269,45 @@ func upsertDataVolume(statefulSet *apps.StatefulSet, mysql *api.MySQL) *apps.Sta
 	return statefulSet
 }
 
-func upsertEnv(statefulSet *apps.StatefulSet, mysql *api.MySQL) *apps.StatefulSet {
+func upsertEnv(statefulSet *apps.StatefulSet, mariadb *api.MariaDB) *apps.StatefulSet {
 	for i, container := range statefulSet.Spec.Template.Spec.Containers {
-		if container.Name == api.ResourceSingularMySQL || container.Name == "exporter" {
+		if container.Name == api.ResourceSingularMariaDB || container.Name == "exporter" {
 			envs := []core.EnvVar{
 				{
-					Name: "MYSQL_ROOT_PASSWORD",
+					Name: "MARIADB_ROOT_PASSWORD",
 					ValueFrom: &core.EnvVarSource{
 						SecretKeyRef: &core.SecretKeySelector{
 							LocalObjectReference: core.LocalObjectReference{
-								Name: mysql.Spec.DatabaseSecret.SecretName,
+								Name: mariadb.Spec.DatabaseSecret.SecretName,
 							},
-							Key: KeyMySQLPassword,
+							Key: KeyMariaDBPassword,
 						},
 					},
 				},
 				{
-					Name: "MYSQL_ROOT_USERNAME",
+					Name: "MARIADB_ROOT_USERNAME",
 					ValueFrom: &core.EnvVarSource{
 						SecretKeyRef: &core.SecretKeySelector{
 							LocalObjectReference: core.LocalObjectReference{
-								Name: mysql.Spec.DatabaseSecret.SecretName,
+								Name: mariadb.Spec.DatabaseSecret.SecretName,
 							},
-							Key: KeyMySQLUser,
+							Key: KeyMariaDBUser,
 						},
 					},
 				},
 			}
-			if mysql.Spec.Topology != nil &&
-				mysql.Spec.Topology.Mode != nil &&
-				*mysql.Spec.Topology.Mode == api.MySQLClusterModeGroup &&
-				container.Name == api.ResourceSingularMySQL {
+			if mariadb.Spec.Topology != nil &&
+				mariadb.Spec.Topology.Mode != nil &&
+				*mariadb.Spec.Topology.Mode == api.MariaDBClusterModeGroup &&
+				container.Name == api.ResourceSingularMariaDB {
 				envs = append(envs, []core.EnvVar{
 					{
 						Name:  "BASE_NAME",
-						Value: mysql.Name,
+						Value: mariadb.Name,
 					},
 					{
 						Name:  "GOV_SVC",
-						Value: mysql.GoverningServiceName(),
+						Value: mariadb.GoverningServiceName(),
 					},
 					{
 						Name: "POD_NAMESPACE",
@@ -319,11 +319,11 @@ func upsertEnv(statefulSet *apps.StatefulSet, mysql *api.MySQL) *apps.StatefulSe
 					},
 					{
 						Name:  "GROUP_NAME",
-						Value: mysql.Spec.Topology.Group.Name,
+						Value: mariadb.Spec.Topology.Group.Name,
 					},
 					{
 						Name:  "BASE_SERVER_ID",
-						Value: strconv.Itoa(int(*mysql.Spec.Topology.Group.BaseServerID)),
+						Value: strconv.Itoa(int(*mariadb.Spec.Topology.Group.BaseServerID)),
 					},
 				}...)
 			}
@@ -335,10 +335,10 @@ func upsertEnv(statefulSet *apps.StatefulSet, mysql *api.MySQL) *apps.StatefulSe
 }
 
 // upsertUserEnv add/overwrite env from user provided env in crd spec
-func upsertUserEnv(statefulSet *apps.StatefulSet, mysql *api.MySQL) *apps.StatefulSet {
+func upsertUserEnv(statefulSet *apps.StatefulSet, mariadb *api.MariaDB) *apps.StatefulSet {
 	for i, container := range statefulSet.Spec.Template.Spec.Containers {
-		if container.Name == api.ResourceSingularMySQL {
-			statefulSet.Spec.Template.Spec.Containers[i].Env = core_util.UpsertEnvVars(container.Env, mysql.Spec.PodTemplate.Spec.Env...)
+		if container.Name == api.ResourceSingularMariaDB {
+			statefulSet.Spec.Template.Spec.Containers[i].Env = core_util.UpsertEnvVars(container.Env, mariadb.Spec.PodTemplate.Spec.Env...)
 			return statefulSet
 		}
 	}
@@ -347,7 +347,7 @@ func upsertUserEnv(statefulSet *apps.StatefulSet, mysql *api.MySQL) *apps.Statef
 
 func upsertInitScript(statefulSet *apps.StatefulSet, script core.VolumeSource) *apps.StatefulSet {
 	for i, container := range statefulSet.Spec.Template.Spec.Containers {
-		if container.Name == api.ResourceSingularMySQL {
+		if container.Name == api.ResourceSingularMariaDB {
 			volumeMount := core.VolumeMount{
 				Name:      "initial-script",
 				MountPath: "/docker-entrypoint-initdb.d",
@@ -384,13 +384,13 @@ func (c *Controller) checkStatefulSetPodStatus(statefulSet *apps.StatefulSet) er
 	return nil
 }
 
-func upsertCustomConfig(statefulSet *apps.StatefulSet, mysql *api.MySQL) *apps.StatefulSet {
-	if mysql.Spec.ConfigSource != nil {
+func upsertCustomConfig(statefulSet *apps.StatefulSet, mariadb *api.MariaDB) *apps.StatefulSet {
+	if mariadb.Spec.ConfigSource != nil {
 		for i, container := range statefulSet.Spec.Template.Spec.Containers {
-			if container.Name == api.ResourceSingularMySQL {
+			if container.Name == api.ResourceSingularMariaDB {
 				configVolumeMount := core.VolumeMount{
 					Name:      "custom-config",
-					MountPath: "/etc/mysql/conf.d",
+					MountPath: "/etc/mariadb/conf.d",
 				}
 				volumeMounts := container.VolumeMounts
 				volumeMounts = core_util.UpsertVolumeMount(volumeMounts, configVolumeMount)
@@ -398,7 +398,7 @@ func upsertCustomConfig(statefulSet *apps.StatefulSet, mysql *api.MySQL) *apps.S
 
 				configVolume := core.Volume{
 					Name:         "custom-config",
-					VolumeSource: *mysql.Spec.ConfigSource,
+					VolumeSource: *mariadb.Spec.ConfigSource,
 				}
 
 				volumes := statefulSet.Spec.Template.Spec.Volumes

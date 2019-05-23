@@ -18,7 +18,7 @@ func (f *Framework) EventuallyONLINEMembersCount(meta metav1.ObjectMeta, dbName 
 			}
 			defer tunnel.Close()
 
-			en, err := f.getMySQLClient(meta, tunnel, dbName)
+			en, err := f.getMariaDBClient(meta, tunnel, dbName)
 			if err != nil {
 				return -1
 			}
@@ -49,7 +49,7 @@ func (f *Framework) EventuallyCreateDatabase(meta metav1.ObjectMeta, dbName stri
 			}
 			defer tunnel.Close()
 
-			en, err := f.getMySQLClient(meta, tunnel, dbName)
+			en, err := f.getMariaDBClient(meta, tunnel, dbName)
 			if err != nil {
 				return false
 			}
@@ -79,7 +79,7 @@ func (f *Framework) InsertRowFromSecondary(meta metav1.ObjectMeta, dbName string
 			}
 			defer tunnel.Close()
 
-			en, err := f.getMySQLClient(meta, tunnel, dbName)
+			en, err := f.getMariaDBClient(meta, tunnel, dbName)
 			if err != nil {
 				return true
 			}
@@ -115,7 +115,7 @@ func (f *Framework) GetPrimaryHostIndex(meta metav1.ObjectMeta, dbName string, c
 	}
 	defer tunnel.Close()
 
-	en, err := f.getMySQLClient(meta, tunnel, dbName)
+	en, err := f.getMariaDBClient(meta, tunnel, dbName)
 	if err != nil {
 		return -1
 	}

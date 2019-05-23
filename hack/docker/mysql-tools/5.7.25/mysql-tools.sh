@@ -6,9 +6,9 @@ set -eou pipefail
 # ref: http://tldp.org/LDP/abs/html/comparison-ops.html
 
 show_help() {
-  echo "mysql-tools.sh - run tools"
+  echo "mariadb-tools.sh - run tools"
   echo " "
-  echo "mysql-tools.sh COMMAND [options]"
+  echo "mariadb-tools.sh COMMAND [options]"
   echo " "
   echo "options:"
   echo "-h, --help                         show brief help"
@@ -87,7 +87,7 @@ if [ -n "$DEBUG" ]; then
   echo ""
 fi
 
-# Wait for mysql to start
+# Wait for mariadb to start
 # ref: http://unix.stackexchange.com/a/5279
 while ! nc -q 1 $DB_HOST $DB_PORT </dev/null; do
   echo "Waiting... database is not ready yet"
@@ -102,7 +102,7 @@ rm -rf *
 case "$op" in
   backup)
     echo "Dumping database......"
-    mysqldump -u ${DB_USER} --password=${DB_PASSWORD} -h ${DB_HOST} "$@" >dumpfile.sql
+    mariadbdump -u ${DB_USER} --password=${DB_PASSWORD} -h ${DB_HOST} "$@" >dumpfile.sql
 
     echo "Uploading dump file to the backend......."
     osm push --enable-analytics="$ENABLE_ANALYTICS" --osmconfig="$OSM_CONFIG_FILE" -c "$DB_BUCKET" "$DB_DATA_DIR" "$DB_FOLDER/$DB_SNAPSHOT"
@@ -114,7 +114,7 @@ case "$op" in
     osm pull --enable-analytics="$ENABLE_ANALYTICS" --osmconfig="$OSM_CONFIG_FILE" -c "$DB_BUCKET" "$DB_FOLDER/$DB_SNAPSHOT" "$DB_DATA_DIR"
 
     echo "Inserting data into database........"
-    mysql -u "$DB_USER" --password=${DB_PASSWORD} -h "$DB_HOST" "$@" -f <dumpfile.sql
+    mariadb -u "$DB_USER" --password=${DB_PASSWORD} -h "$DB_HOST" "$@" -f <dumpfile.sql
 
     echo "Recovery successful"
     ;;

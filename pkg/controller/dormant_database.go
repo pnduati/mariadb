@@ -18,7 +18,7 @@ import (
 
 // WaitUntilPaused is an Interface of *amc.Controller
 func (c *Controller) WaitUntilPaused(drmn *api.DormantDatabase) error {
-	db := &api.MySQL{
+	db := &api.MariaDB{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      drmn.OffshootName(),
 			Namespace: drmn.Namespace,
@@ -40,16 +40,16 @@ func (c *Controller) WaitUntilPaused(drmn *api.DormantDatabase) error {
 	return nil
 }
 
-func (c *Controller) waitUntilRBACStuffDeleted(mysql *api.MySQL) error {
+func (c *Controller) waitUntilRBACStuffDeleted(mariadb *api.MariaDB) error {
 	// Delete ServiceAccount
-	if err := core_util.WaitUntillServiceAccountDeleted(c.Client, mysql.ObjectMeta); err != nil {
+	if err := core_util.WaitUntillServiceAccountDeleted(c.Client, mariadb.ObjectMeta); err != nil {
 		return err
 	}
 
 	// Delete Snapshot ServiceAccount
 	snapSAMeta := metav1.ObjectMeta{
-		Name:      mysql.SnapshotSAName(),
-		Namespace: mysql.Namespace,
+		Name:      mariadb.SnapshotSAName(),
+		Namespace: mariadb.Namespace,
 	}
 	if err := core_util.WaitUntillServiceAccountDeleted(c.Client, snapSAMeta); err != nil {
 		return err
@@ -71,7 +71,7 @@ func (c *Controller) WipeOutDatabase(drmn *api.DormantDatabase) error {
 	return nil
 }
 
-// wipeOutDatabase is a generic function to call from WipeOutDatabase and mysql pause method.
+// wipeOutDatabase is a generic function to call from WipeOutDatabase and mariadb pause method.
 func (c *Controller) wipeOutDatabase(meta metav1.ObjectMeta, secrets []string, ref *core.ObjectReference) error {
 	secretUsed, err := c.secretsUsedByPeers(meta)
 	if err != nil {
@@ -86,9 +86,9 @@ func (c *Controller) wipeOutDatabase(meta metav1.ObjectMeta, secrets []string, r
 		ref)
 }
 
-func (c *Controller) deleteMatchingDormantDatabase(mysql *api.MySQL) error {
+func (c *Controller) deleteMatchingDormantDatabase(mariadb *api.MariaDB) error {
 	// Check if DormantDatabase exists or not
-	ddb, err := c.ExtClient.KubedbV1alpha1().DormantDatabases(mysql.Namespace).Get(mysql.Name, metav1.GetOptions{})
+	ddb, err := c.ExtClient.KubedbV1alpha1().DormantDatabases(mariadb.Namespace).Get(mariadb.Name, metav1.GetOptions{})
 	if err != nil {
 		if !kerr.IsNotFound(err) {
 			return err
@@ -105,7 +105,7 @@ func (c *Controller) deleteMatchingDormantDatabase(mysql *api.MySQL) error {
 	}
 
 	// Delete  Matching dormantDatabase
-	if err := c.ExtClient.KubedbV1alpha1().DormantDatabases(mysql.Namespace).Delete(mysql.Name,
+	if err := c.ExtClient.KubedbV1alpha1().DormantDatabases(mariadb.Namespace).Delete(mariadb.Name,
 		meta_util.DeleteInBackground()); err != nil && !kerr.IsNotFound(err) {
 		return err
 	}
@@ -113,26 +113,26 @@ func (c *Controller) deleteMatchingDormantDatabase(mysql *api.MySQL) error {
 	return nil
 }
 
-func (c *Controller) createDormantDatabase(mysql *api.MySQL) (*api.DormantDatabase, error) {
+func (c *Controller) createDormantDatabase(mariadb *api.MariaDB) (*api.DormantDatabase, error) {
 	dormantDb := &api.DormantDatabase{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      mysql.Name,
-			Namespace: mysql.Namespace,
+			Name:      mariadb.Name,
+			Namespace: mariadb.Namespace,
 			Labels: map[string]string{
-				api.LabelDatabaseKind: api.ResourceKindMySQL,
+				api.LabelDatabaseKind: api.ResourceKindMariaDB,
 			},
 		},
 		Spec: api.DormantDatabaseSpec{
 			Origin: api.Origin{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:              mysql.Name,
-					Namespace:         mysql.Namespace,
-					Labels:            mysql.Labels,
-					Annotations:       mysql.Annotations,
-					CreationTimestamp: mysql.CreationTimestamp,
+					Name:              mariadb.Name,
+					Namespace:         mariadb.Namespace,
+					Labels:            mariadb.Labels,
+					Annotations:       mariadb.Annotations,
+					CreationTimestamp: mariadb.CreationTimestamp,
 				},
 				Spec: api.OriginSpec{
-					MySQL: &mysql.Spec,
+					MariaDB: &mariadb.Spec,
 				},
 			},
 		},
@@ -146,7 +146,7 @@ func (c *Controller) createDormantDatabase(mysql *api.MySQL) (*api.DormantDataba
 func (c *Controller) secretsUsedByPeers(meta metav1.ObjectMeta) (sets.String, error) {
 	secretUsed := sets.NewString()
 
-	dbList, err := c.myLister.MySQLs(meta.Namespace).List(labels.Everything())
+	dbList, err := c.myLister.MariaDBs(meta.Namespace).List(labels.Everything())
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (c *Controller) secretsUsedByPeers(meta metav1.ObjectMeta) (sets.String, er
 		}
 	}
 	labelMap := map[string]string{
-		api.LabelDatabaseKind: api.ResourceKindMySQL,
+		api.LabelDatabaseKind: api.ResourceKindMariaDB,
 	}
 	drmnList, err := c.ExtClient.KubedbV1alpha1().DormantDatabases(meta.Namespace).List(
 		metav1.ListOptions{

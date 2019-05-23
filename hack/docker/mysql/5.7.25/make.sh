@@ -8,12 +8,12 @@ source "$REPO_ROOT/hack/libbuild/common/lib.sh"
 source "$REPO_ROOT/hack/libbuild/common/kubedb_image.sh"
 
 DOCKER_REGISTRY=${DOCKER_REGISTRY:-kubedb}
-IMG=mysql
+IMG=mariadb
 DB_VERSION=5.7.25
 TAG="$DB_VERSION"
 
 build() {
-  pushd "$REPO_ROOT/hack/docker/mysql/$DB_VERSION"
+  pushd "$REPO_ROOT/hack/docker/mariadb/$DB_VERSION"
 
   # Download Peer-finder
   # ref: peer-finder: https://github.com/kmodules/peer-finder/releases/download/v1.0.1-ac/peer-finder

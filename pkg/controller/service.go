@@ -25,19 +25,19 @@ var defaultDBPort = core.ServicePort{
 	TargetPort: intstr.FromString("db"),
 }
 
-func (c *Controller) ensureService(mysql *api.MySQL) (kutil.VerbType, error) {
+func (c *Controller) ensureService(mariadb *api.MariaDB) (kutil.VerbType, error) {
 	// Check if service name exists
-	if err := c.checkService(mysql, mysql.ServiceName()); err != nil {
+	if err := c.checkService(mariadb, mariadb.ServiceName()); err != nil {
 		return kutil.VerbUnchanged, err
 	}
 
 	// create database Service
-	vt, err := c.createService(mysql)
+	vt, err := c.createService(mariadb)
 	if err != nil {
 		return kutil.VerbUnchanged, err
 	} else if vt != kutil.VerbUnchanged {
 		c.recorder.Eventf(
-			mysql,
+			mariadb,
 			core.EventTypeNormal,
 			eventer.EventReasonSuccessful,
 			"Successfully %s Service",
@@ -47,8 +47,8 @@ func (c *Controller) ensureService(mysql *api.MySQL) (kutil.VerbType, error) {
 	return vt, nil
 }
 
-func (c *Controller) checkService(mysql *api.MySQL, serviceName string) error {
-	service, err := c.Client.CoreV1().Services(mysql.Namespace).Get(serviceName, metav1.GetOptions{})
+func (c *Controller) checkService(mariadb *api.MariaDB, serviceName string) error {
+	service, err := c.Client.CoreV1().Services(mariadb.Namespace).Get(serviceName, metav1.GetOptions{})
 	if err != nil {
 		if kerr.IsNotFound(err) {
 			return nil
@@ -56,85 +56,85 @@ func (c *Controller) checkService(mysql *api.MySQL, serviceName string) error {
 		return err
 	}
 
-	if service.Labels[api.LabelDatabaseKind] != api.ResourceKindMySQL ||
-		service.Labels[api.LabelDatabaseName] != mysql.Name {
-		return fmt.Errorf(`intended service "%v/%v" already exists`, mysql.Namespace, serviceName)
+	if service.Labels[api.LabelDatabaseKind] != api.ResourceKindMariaDB ||
+		service.Labels[api.LabelDatabaseName] != mariadb.Name {
+		return fmt.Errorf(`intended service "%v/%v" already exists`, mariadb.Namespace, serviceName)
 	}
 
 	return nil
 }
 
-func (c *Controller) createService(mysql *api.MySQL) (kutil.VerbType, error) {
+func (c *Controller) createService(mariadb *api.MariaDB) (kutil.VerbType, error) {
 	meta := metav1.ObjectMeta{
-		Name:      mysql.OffshootName(),
-		Namespace: mysql.Namespace,
+		Name:      mariadb.OffshootName(),
+		Namespace: mariadb.Namespace,
 	}
 
-	ref, rerr := reference.GetReference(clientsetscheme.Scheme, mysql)
+	ref, rerr := reference.GetReference(clientsetscheme.Scheme, mariadb)
 	if rerr != nil {
 		return kutil.VerbUnchanged, rerr
 	}
 
 	_, ok, err := core_util.CreateOrPatchService(c.Client, meta, func(in *core.Service) *core.Service {
 		core_util.EnsureOwnerReference(&in.ObjectMeta, ref)
-		in.Labels = mysql.OffshootLabels()
-		in.Annotations = mysql.Spec.ServiceTemplate.Annotations
+		in.Labels = mariadb.OffshootLabels()
+		in.Annotations = mariadb.Spec.ServiceTemplate.Annotations
 
-		in.Spec.Selector = mysql.OffshootSelectors()
+		in.Spec.Selector = mariadb.OffshootSelectors()
 		in.Spec.Ports = ofst.MergeServicePorts(
 			core_util.MergeServicePorts(in.Spec.Ports, []core.ServicePort{defaultDBPort}),
-			mysql.Spec.ServiceTemplate.Spec.Ports,
+			mariadb.Spec.ServiceTemplate.Spec.Ports,
 		)
 
-		if mysql.Spec.ServiceTemplate.Spec.ClusterIP != "" {
-			in.Spec.ClusterIP = mysql.Spec.ServiceTemplate.Spec.ClusterIP
+		if mariadb.Spec.ServiceTemplate.Spec.ClusterIP != "" {
+			in.Spec.ClusterIP = mariadb.Spec.ServiceTemplate.Spec.ClusterIP
 		}
-		if mysql.Spec.ServiceTemplate.Spec.Type != "" {
-			in.Spec.Type = mysql.Spec.ServiceTemplate.Spec.Type
+		if mariadb.Spec.ServiceTemplate.Spec.Type != "" {
+			in.Spec.Type = mariadb.Spec.ServiceTemplate.Spec.Type
 		}
-		in.Spec.ExternalIPs = mysql.Spec.ServiceTemplate.Spec.ExternalIPs
-		in.Spec.LoadBalancerIP = mysql.Spec.ServiceTemplate.Spec.LoadBalancerIP
-		in.Spec.LoadBalancerSourceRanges = mysql.Spec.ServiceTemplate.Spec.LoadBalancerSourceRanges
-		in.Spec.ExternalTrafficPolicy = mysql.Spec.ServiceTemplate.Spec.ExternalTrafficPolicy
-		if mysql.Spec.ServiceTemplate.Spec.HealthCheckNodePort > 0 {
-			in.Spec.HealthCheckNodePort = mysql.Spec.ServiceTemplate.Spec.HealthCheckNodePort
+		in.Spec.ExternalIPs = mariadb.Spec.ServiceTemplate.Spec.ExternalIPs
+		in.Spec.LoadBalancerIP = mariadb.Spec.ServiceTemplate.Spec.LoadBalancerIP
+		in.Spec.LoadBalancerSourceRanges = mariadb.Spec.ServiceTemplate.Spec.LoadBalancerSourceRanges
+		in.Spec.ExternalTrafficPolicy = mariadb.Spec.ServiceTemplate.Spec.ExternalTrafficPolicy
+		if mariadb.Spec.ServiceTemplate.Spec.HealthCheckNodePort > 0 {
+			in.Spec.HealthCheckNodePort = mariadb.Spec.ServiceTemplate.Spec.HealthCheckNodePort
 		}
 		return in
 	})
 	return ok, err
 }
 
-func (c *Controller) ensureStatsService(mysql *api.MySQL) (kutil.VerbType, error) {
+func (c *Controller) ensureStatsService(mariadb *api.MariaDB) (kutil.VerbType, error) {
 	// return if monitoring is not prometheus
-	if mysql.GetMonitoringVendor() != mona.VendorPrometheus {
+	if mariadb.GetMonitoringVendor() != mona.VendorPrometheus {
 		log.Infoln("spec.monitor.agent is not coreos-operator or builtin.")
 		return kutil.VerbUnchanged, nil
 	}
 
 	// Check if statsService name exists
-	if err := c.checkService(mysql, mysql.StatsService().ServiceName()); err != nil {
+	if err := c.checkService(mariadb, mariadb.StatsService().ServiceName()); err != nil {
 		return kutil.VerbUnchanged, err
 	}
 
-	ref, rerr := reference.GetReference(clientsetscheme.Scheme, mysql)
+	ref, rerr := reference.GetReference(clientsetscheme.Scheme, mariadb)
 	if rerr != nil {
 		return kutil.VerbUnchanged, rerr
 	}
 
 	// reconcile stats Service
 	meta := metav1.ObjectMeta{
-		Name:      mysql.StatsService().ServiceName(),
-		Namespace: mysql.Namespace,
+		Name:      mariadb.StatsService().ServiceName(),
+		Namespace: mariadb.Namespace,
 	}
 	_, vt, err := core_util.CreateOrPatchService(c.Client, meta, func(in *core.Service) *core.Service {
 		core_util.EnsureOwnerReference(&in.ObjectMeta, ref)
-		in.Labels = mysql.StatsServiceLabels()
-		in.Spec.Selector = mysql.OffshootSelectors()
+		in.Labels = mariadb.StatsServiceLabels()
+		in.Spec.Selector = mariadb.OffshootSelectors()
 		in.Spec.Ports = core_util.MergeServicePorts(in.Spec.Ports, []core.ServicePort{
 			{
 				Name:       api.PrometheusExporterPortName,
 				Protocol:   core.ProtocolTCP,
-				Port:       mysql.Spec.Monitor.Prometheus.Port,
+				Port:       mariadb.Spec.Monitor.Prometheus.Port,
 				TargetPort: intstr.FromString(api.PrometheusExporterPortName),
 			},
 		})
@@ -144,7 +144,7 @@ func (c *Controller) ensureStatsService(mysql *api.MySQL) (kutil.VerbType, error
 		return kutil.VerbUnchanged, err
 	} else if vt != kutil.VerbUnchanged {
 		c.recorder.Eventf(
-			mysql,
+			mariadb,
 			core.EventTypeNormal,
 			eventer.EventReasonSuccessful,
 			"Successfully %s stats service",
@@ -154,17 +154,17 @@ func (c *Controller) ensureStatsService(mysql *api.MySQL) (kutil.VerbType, error
 	return vt, nil
 }
 
-func (c *Controller) createMySQLGoverningService(mysql *api.MySQL) (string, error) {
-	ref, rerr := reference.GetReference(clientsetscheme.Scheme, mysql)
+func (c *Controller) createMariaDBGoverningService(mariadb *api.MariaDB) (string, error) {
+	ref, rerr := reference.GetReference(clientsetscheme.Scheme, mariadb)
 	if rerr != nil {
 		return "", rerr
 	}
 
 	service := &core.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      mysql.GoverningServiceName(),
-			Namespace: mysql.Namespace,
-			Labels:    mysql.OffshootLabels(),
+			Name:      mariadb.GoverningServiceName(),
+			Namespace: mariadb.Namespace,
+			Labels:    mariadb.OffshootLabels(),
 			// 'tolerate-unready-endpoints' annotation is deprecated.
 			// ref: https://github.com/kubernetes/kubernetes/pull/63742
 			Annotations: map[string]string{
@@ -178,15 +178,15 @@ func (c *Controller) createMySQLGoverningService(mysql *api.MySQL) (string, erro
 			Ports: []core.ServicePort{
 				{
 					Name: "db",
-					Port: api.MySQLNodePort,
+					Port: api.MariaDBNodePort,
 				},
 			},
-			Selector: mysql.OffshootSelectors(),
+			Selector: mariadb.OffshootSelectors(),
 		},
 	}
 	core_util.EnsureOwnerReference(&service.ObjectMeta, ref)
 
-	_, err := c.Client.CoreV1().Services(mysql.Namespace).Create(service)
+	_, err := c.Client.CoreV1().Services(mariadb.Namespace).Create(service)
 	if err != nil && !kerr.IsAlreadyExists(err) {
 		return "", err
 	}

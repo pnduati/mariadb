@@ -30,7 +30,7 @@ func deleteInForeground() *metav1.DeleteOptions {
 }
 
 func (f *Invocation) GetCustomConfig(configs []string) *core.ConfigMap {
-	configs = append([]string{"[mysqld]"}, configs...)
+	configs = append([]string{"[mariadbd]"}, configs...)
 	return &core.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      f.app,
@@ -59,7 +59,7 @@ func (f *Framework) CleanWorkloadLeftOvers() {
 	// delete statefulset
 	if err := f.kubeClient.AppsV1().StatefulSets(f.namespace).DeleteCollection(deleteInForeground(), metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(map[string]string{
-			api.LabelDatabaseKind: api.ResourceKindMySQL,
+			api.LabelDatabaseKind: api.ResourceKindMariaDB,
 		}).String(),
 	}); err != nil && !kerr.IsNotFound(err) {
 		fmt.Printf("error in deletion of Statefulset. Error: %v", err)
@@ -68,7 +68,7 @@ func (f *Framework) CleanWorkloadLeftOvers() {
 	// delete pvc
 	if err := f.kubeClient.CoreV1().PersistentVolumeClaims(f.namespace).DeleteCollection(deleteInForeground(), metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(map[string]string{
-			api.LabelDatabaseKind: api.ResourceKindMySQL,
+			api.LabelDatabaseKind: api.ResourceKindMariaDB,
 		}).String(),
 	}); err != nil && !kerr.IsNotFound(err) {
 		fmt.Printf("error in deletion of PVC. Error: %v", err)
@@ -77,20 +77,20 @@ func (f *Framework) CleanWorkloadLeftOvers() {
 	// delete secret
 	if err := f.kubeClient.CoreV1().Secrets(f.namespace).DeleteCollection(deleteInForeground(), metav1.ListOptions{
 		LabelSelector: labels.SelectorFromSet(map[string]string{
-			api.LabelDatabaseKind: api.ResourceKindMySQL,
+			api.LabelDatabaseKind: api.ResourceKindMariaDB,
 		}).String(),
 	}); err != nil && !kerr.IsNotFound(err) {
 		fmt.Printf("error in deletion of Secret. Error: %v", err)
 	}
 }
 
-func (f *Framework) WaitUntilPodRunningBySelector(mysql *api.MySQL) error {
+func (f *Framework) WaitUntilPodRunningBySelector(mariadb *api.MariaDB) error {
 	return core_util.WaitUntilPodRunningBySelector(
 		f.kubeClient,
-		mysql.Namespace,
+		mariadb.Namespace,
 		&metav1.LabelSelector{
-			MatchLabels: mysql.OffshootSelectors(),
+			MatchLabels: mariadb.OffshootSelectors(),
 		},
-		int(types.Int32(mysql.Spec.Replicas)),
+		int(types.Int32(mariadb.Spec.Replicas)),
 	)
 }

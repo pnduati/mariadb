@@ -9,7 +9,7 @@ source "$REPO_ROOT/hack/libbuild/common/kubedb_image.sh"
 
 DOCKER_REGISTRY=${DOCKER_REGISTRY:-kubedb}
 
-IMG=mysql-tools
+IMG=mariadb-tools
 
 DB_VERSION=8.0.14
 TAG="$DB_VERSION"
@@ -20,7 +20,7 @@ DIST=$REPO_ROOT/dist
 mkdir -p $DIST
 
 build() {
-  pushd "$REPO_ROOT/hack/docker/mysql-tools/$DB_VERSION"
+  pushd "$REPO_ROOT/hack/docker/mariadb-tools/$DB_VERSION"
 
   # Download osm
   wget https://cdn.appscode.com/binaries/osm/${OSM_VER}/osm-alpine-amd64

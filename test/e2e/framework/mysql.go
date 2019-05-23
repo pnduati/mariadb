@@ -21,16 +21,16 @@ var (
 	DBPvcStorageSize  = "1Gi"
 )
 
-func (f *Invocation) MySQL() *api.MySQL {
-	return &api.MySQL{
+func (f *Invocation) MariaDB() *api.MariaDB {
+	return &api.MariaDB{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      rand.WithUniqSuffix("mysql"),
+			Name:      rand.WithUniqSuffix("mariadb"),
 			Namespace: f.namespace,
 			Labels: map[string]string{
 				"app": f.app,
 			},
 		},
-		Spec: api.MySQLSpec{
+		Spec: api.MariaDBSpec{
 			Version: jsonTypes.StrYo(DBVersion),
 			Storage: &core.PersistentVolumeClaimSpec{
 				Resources: core.ResourceRequirements{
@@ -44,47 +44,47 @@ func (f *Invocation) MySQL() *api.MySQL {
 	}
 }
 
-func (f *Invocation) MySQLGroup() *api.MySQL {
-	mysql := f.MySQL()
-	mysql.Spec.Replicas = types.Int32P(api.MySQLDefaultGroupSize)
-	clusterMode := api.MySQLClusterModeGroup
-	mysql.Spec.Topology = &api.MySQLClusterTopology{
+func (f *Invocation) MariaDBGroup() *api.MariaDB {
+	mariadb := f.MariaDB()
+	mariadb.Spec.Replicas = types.Int32P(api.MariaDBDefaultGroupSize)
+	clusterMode := api.MariaDBClusterModeGroup
+	mariadb.Spec.Topology = &api.MariaDBClusterTopology{
 		Mode: &clusterMode,
-		Group: &api.MySQLGroupSpec{
+		Group: &api.MariaDBGroupSpec{
 			Name:         "dc002fc3-c412-4d18-b1d4-66c1fbfbbc9b",
-			BaseServerID: types.UIntP(api.MySQLDefaultBaseServerID),
+			BaseServerID: types.UIntP(api.MariaDBDefaultBaseServerID),
 		},
 	}
 
-	return mysql
+	return mariadb
 }
 
-func (f *Framework) CreateMySQL(obj *api.MySQL) error {
-	_, err := f.extClient.KubedbV1alpha1().MySQLs(obj.Namespace).Create(obj)
+func (f *Framework) CreateMariaDB(obj *api.MariaDB) error {
+	_, err := f.extClient.KubedbV1alpha1().MariaDBs(obj.Namespace).Create(obj)
 	return err
 }
 
-func (f *Framework) GetMySQL(meta metav1.ObjectMeta) (*api.MySQL, error) {
-	return f.extClient.KubedbV1alpha1().MySQLs(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
+func (f *Framework) GetMariaDB(meta metav1.ObjectMeta) (*api.MariaDB, error) {
+	return f.extClient.KubedbV1alpha1().MariaDBs(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
 }
 
-func (f *Framework) PatchMySQL(meta metav1.ObjectMeta, transform func(*api.MySQL) *api.MySQL) (*api.MySQL, error) {
-	mysql, err := f.extClient.KubedbV1alpha1().MySQLs(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
+func (f *Framework) PatchMariaDB(meta metav1.ObjectMeta, transform func(*api.MariaDB) *api.MariaDB) (*api.MariaDB, error) {
+	mariadb, err := f.extClient.KubedbV1alpha1().MariaDBs(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
-	mysql, _, err = util.PatchMySQL(f.extClient.KubedbV1alpha1(), mysql, transform)
-	return mysql, err
+	mariadb, _, err = util.PatchMariaDB(f.extClient.KubedbV1alpha1(), mariadb, transform)
+	return mariadb, err
 }
 
-func (f *Framework) DeleteMySQL(meta metav1.ObjectMeta) error {
-	return f.extClient.KubedbV1alpha1().MySQLs(meta.Namespace).Delete(meta.Name, &metav1.DeleteOptions{})
+func (f *Framework) DeleteMariaDB(meta metav1.ObjectMeta) error {
+	return f.extClient.KubedbV1alpha1().MariaDBs(meta.Namespace).Delete(meta.Name, &metav1.DeleteOptions{})
 }
 
-func (f *Framework) EventuallyMySQL(meta metav1.ObjectMeta) GomegaAsyncAssertion {
+func (f *Framework) EventuallyMariaDB(meta metav1.ObjectMeta) GomegaAsyncAssertion {
 	return Eventually(
 		func() bool {
-			_, err := f.extClient.KubedbV1alpha1().MySQLs(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
+			_, err := f.extClient.KubedbV1alpha1().MariaDBs(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
 			if err != nil {
 				if kerr.IsNotFound(err) {
 					return false
@@ -98,33 +98,33 @@ func (f *Framework) EventuallyMySQL(meta metav1.ObjectMeta) GomegaAsyncAssertion
 	)
 }
 
-func (f *Framework) EventuallyMySQLRunning(meta metav1.ObjectMeta) GomegaAsyncAssertion {
+func (f *Framework) EventuallyMariaDBRunning(meta metav1.ObjectMeta) GomegaAsyncAssertion {
 	return Eventually(
 		func() bool {
-			mysql, err := f.extClient.KubedbV1alpha1().MySQLs(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
+			mariadb, err := f.extClient.KubedbV1alpha1().MariaDBs(meta.Namespace).Get(meta.Name, metav1.GetOptions{})
 			Expect(err).NotTo(HaveOccurred())
-			return mysql.Status.Phase == api.DatabasePhaseRunning
+			return mariadb.Status.Phase == api.DatabasePhaseRunning
 		},
 		time.Minute*15,
 		time.Second*5,
 	)
 }
 
-func (f *Framework) CleanMySQL() {
-	mysqlList, err := f.extClient.KubedbV1alpha1().MySQLs(f.namespace).List(metav1.ListOptions{})
+func (f *Framework) CleanMariaDB() {
+	mariadbList, err := f.extClient.KubedbV1alpha1().MariaDBs(f.namespace).List(metav1.ListOptions{})
 	if err != nil {
 		return
 	}
-	for _, e := range mysqlList.Items {
-		if _, _, err := util.PatchMySQL(f.extClient.KubedbV1alpha1(), &e, func(in *api.MySQL) *api.MySQL {
+	for _, e := range mariadbList.Items {
+		if _, _, err := util.PatchMariaDB(f.extClient.KubedbV1alpha1(), &e, func(in *api.MariaDB) *api.MariaDB {
 			in.ObjectMeta.Finalizers = nil
 			in.Spec.TerminationPolicy = api.TerminationPolicyWipeOut
 			return in
 		}); err != nil {
-			fmt.Printf("error Patching MySQL. error: %v", err)
+			fmt.Printf("error Patching MariaDB. error: %v", err)
 		}
 	}
-	if err := f.extClient.KubedbV1alpha1().MySQLs(f.namespace).DeleteCollection(deleteInForeground(), metav1.ListOptions{}); err != nil {
-		fmt.Printf("error in deletion of MySQL. Error: %v", err)
+	if err := f.extClient.KubedbV1alpha1().MariaDBs(f.namespace).DeleteCollection(deleteInForeground(), metav1.ListOptions{}); err != nil {
+		fmt.Printf("error in deletion of MariaDB. Error: %v", err)
 	}
 }

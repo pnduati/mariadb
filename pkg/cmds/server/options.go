@@ -75,7 +75,7 @@ func (s *ExtraOptions) AddGoFlags(fs *flag.FlagSet) {
 }
 
 func (s *ExtraOptions) AddFlags(fs *pflag.FlagSet) {
-	pfs := flag.NewFlagSet("mysql-server", flag.ExitOnError)
+	pfs := flag.NewFlagSet("mariadb-server", flag.ExitOnError)
 	s.AddGoFlags(pfs)
 	fs.AddGoFlagSet(pfs)
 }

@@ -3,7 +3,7 @@ set -xeou pipefail
 
 DOCKER_REGISTRY=${DOCKER_REGISTRY:-kubedb}
 
-IMG=mysql-tools
+IMG=mariadb-tools
 SUFFIX=v3
 
 DB_VERSION=8.0

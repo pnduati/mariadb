@@ -46,10 +46,10 @@ type Controller struct {
 	// labelselector for event-handler of Snapshot, Dormant and Job
 	selector labels.Selector
 
-	// MySQL
+	// MariaDB
 	myQueue    *queue.Worker
 	myInformer cache.SharedIndexInformer
-	myLister   api_listers.MySQLLister
+	myLister   api_listers.MariaDBLister
 }
 
 var _ amc.Snapshotter = &Controller{}
@@ -81,7 +81,7 @@ func New(
 		cronController: cronController,
 		recorder:       recorder,
 		selector: labels.SelectorFromSet(map[string]string{
-			api.LabelDatabaseKind: api.ResourceKindMySQL,
+			api.LabelDatabaseKind: api.ResourceKindMariaDB,
 		}),
 	}
 }
@@ -90,18 +90,18 @@ func New(
 func (c *Controller) EnsureCustomResourceDefinitions() error {
 	log.Infoln("Ensuring CustomResourceDefinition...")
 	crds := []*crd_api.CustomResourceDefinition{
-		api.MySQL{}.CustomResourceDefinition(),
-		catalog.MySQLVersion{}.CustomResourceDefinition(),
+		api.MariaDB{}.CustomResourceDefinition(),
+		catalog.MariaDBVersion{}.CustomResourceDefinition(),
 		api.DormantDatabase{}.CustomResourceDefinition(),
 		api.Snapshot{}.CustomResourceDefinition(),
-		authorization.MySQLRole{}.CustomResourceDefinition(),
+		authorization.MariaDBRole{}.CustomResourceDefinition(),
 		authorization.DatabaseAccessRequest{}.CustomResourceDefinition(),
 		appcat.AppBinding{}.CustomResourceDefinition(),
 	}
 	return apiext_util.RegisterCRDs(c.ApiExtKubeClient, crds)
 }
 
-// Init initializes mysql, DormantDB amd Snapshot watcher
+// Init initializes mariadb, DormantDB amd Snapshot watcher
 func (c *Controller) Init() error {
 	c.initWatcher()
 	c.DrmnQueue = drmnc.NewController(c.Controller, c, c.Config, nil, c.recorder).AddEventHandlerFunc(c.selector)
@@ -167,30 +167,30 @@ func (c *Controller) StartAndRunControllers(stopCh <-chan struct{}) {
 	log.Infoln("Stopping KubeDB controller")
 }
 
-func (c *Controller) pushFailureEvent(mysql *api.MySQL, reason string) {
+func (c *Controller) pushFailureEvent(mariadb *api.MariaDB, reason string) {
 	c.recorder.Eventf(
-		mysql,
+		mariadb,
 		core.EventTypeWarning,
 		eventer.EventReasonFailedToStart,
-		`Fail to be ready MySQL: "%v". Reason: %v`,
-		mysql.Name,
+		`Fail to be ready MariaDB: "%v". Reason: %v`,
+		mariadb.Name,
 		reason,
 	)
 
-	my, err := util.UpdateMySQLStatus(c.ExtClient.KubedbV1alpha1(), mysql, func(in *api.MySQLStatus) *api.MySQLStatus {
+	my, err := util.UpdateMariaDBStatus(c.ExtClient.KubedbV1alpha1(), mariadb, func(in *api.MariaDBStatus) *api.MariaDBStatus {
 		in.Phase = api.DatabasePhaseFailed
 		in.Reason = reason
-		in.ObservedGeneration = types.NewIntHash(mysql.Generation, meta_util.GenerationHash(mysql))
+		in.ObservedGeneration = types.NewIntHash(mariadb.Generation, meta_util.GenerationHash(mariadb))
 		return in
 	}, apis.EnableStatusSubresource)
 
 	if err != nil {
 		c.recorder.Eventf(
-			mysql,
+			mariadb,
 			core.EventTypeWarning,
 			eventer.EventReasonFailedToUpdate,
 			err.Error(),
 		)
 	}
-	mysql.Status = my.Status
+	mariadb.Status = my.Status
 }

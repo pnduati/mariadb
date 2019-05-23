@@ -16,7 +16,7 @@ import (
 	appcat_util "kmodules.xyz/custom-resources/client/clientset/versioned/typed/appcatalog/v1alpha1/util"
 )
 
-func (c *Controller) ensureAppBinding(db *api.MySQL) (kutil.VerbType, error) {
+func (c *Controller) ensureAppBinding(db *api.MariaDB) (kutil.VerbType, error) {
 	appmeta := db.AppBindingMeta()
 
 	meta := metav1.ObjectMeta{
@@ -37,7 +37,7 @@ func (c *Controller) ensureAppBinding(db *api.MySQL) (kutil.VerbType, error) {
 		in.Spec.Type = appmeta.Type()
 		in.Spec.ClientConfig.URL = types.StringP(fmt.Sprintf("tcp(%s:%d)/", db.ServiceName(), defaultDBPort.Port))
 		in.Spec.ClientConfig.Service = &appcat.ServiceReference{
-			Scheme: "mysql",
+			Scheme: "mariadb",
 			Name:   db.ServiceName(),
 			Port:   defaultDBPort.Port,
 			Path:   "/",

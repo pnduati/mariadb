@@ -13,7 +13,7 @@ import (
 	rbac_util "kmodules.xyz/client-go/rbac/v1beta1"
 )
 
-func (c *Controller) createServiceAccount(db *api.MySQL, saName string) error {
+func (c *Controller) createServiceAccount(db *api.MariaDB, saName string) error {
 	ref, rerr := reference.GetReference(clientsetscheme.Scheme, db)
 	if rerr != nil {
 		return rerr
@@ -34,7 +34,7 @@ func (c *Controller) createServiceAccount(db *api.MySQL, saName string) error {
 	return err
 }
 
-func (c *Controller) ensureRole(db *api.MySQL, name string, pspName string) error {
+func (c *Controller) ensureRole(db *api.MariaDB, name string, pspName string) error {
 	ref, rerr := reference.GetReference(clientsetscheme.Scheme, db)
 	if rerr != nil {
 		return rerr
@@ -66,7 +66,7 @@ func (c *Controller) ensureRole(db *api.MySQL, name string, pspName string) erro
 	return err
 }
 
-func (c *Controller) createRoleBinding(db *api.MySQL, name string) error {
+func (c *Controller) createRoleBinding(db *api.MariaDB, name string) error {
 	ref, rerr := reference.GetReference(clientsetscheme.Scheme, db)
 	if rerr != nil {
 		return rerr
@@ -99,8 +99,8 @@ func (c *Controller) createRoleBinding(db *api.MySQL, name string) error {
 	return err
 }
 
-func (c *Controller) getPolicyNames(db *api.MySQL) (string, string, error) {
-	dbVersion, err := c.ExtClient.CatalogV1alpha1().MySQLVersions().Get(string(db.Spec.Version), metav1.GetOptions{})
+func (c *Controller) getPolicyNames(db *api.MariaDB) (string, string, error) {
+	dbVersion, err := c.ExtClient.CatalogV1alpha1().MariaDBVersions().Get(string(db.Spec.Version), metav1.GetOptions{})
 	if err != nil {
 		return "", "", err
 	}
@@ -110,43 +110,43 @@ func (c *Controller) getPolicyNames(db *api.MySQL) (string, string, error) {
 	return dbPolicyName, snapshotPolicyName, nil
 }
 
-func (c *Controller) ensureRBACStuff(mysql *api.MySQL) error {
-	dbPolicyName, snapshotPolicyName, err := c.getPolicyNames(mysql)
+func (c *Controller) ensureRBACStuff(mariadb *api.MariaDB) error {
+	dbPolicyName, snapshotPolicyName, err := c.getPolicyNames(mariadb)
 	if err != nil {
 		return err
 	}
 
 	// Create New ServiceAccount
-	if err := c.createServiceAccount(mysql, mysql.OffshootName()); err != nil {
+	if err := c.createServiceAccount(mariadb, mariadb.OffshootName()); err != nil {
 		if !kerr.IsAlreadyExists(err) {
 			return err
 		}
 	}
 
 	// Create New Role
-	if err := c.ensureRole(mysql, mysql.OffshootName(), dbPolicyName); err != nil {
+	if err := c.ensureRole(mariadb, mariadb.OffshootName(), dbPolicyName); err != nil {
 		return err
 	}
 
 	// Create New RoleBinding
-	if err := c.createRoleBinding(mysql, mysql.OffshootName()); err != nil {
+	if err := c.createRoleBinding(mariadb, mariadb.OffshootName()); err != nil {
 		return err
 	}
 
 	// Create New SNapshot ServiceAccount
-	if err := c.createServiceAccount(mysql, mysql.SnapshotSAName()); err != nil {
+	if err := c.createServiceAccount(mariadb, mariadb.SnapshotSAName()); err != nil {
 		if !kerr.IsAlreadyExists(err) {
 			return err
 		}
 	}
 
 	// Create New Role for Snapshot
-	if err := c.ensureRole(mysql, mysql.SnapshotSAName(), snapshotPolicyName); err != nil {
+	if err := c.ensureRole(mariadb, mariadb.SnapshotSAName(), snapshotPolicyName); err != nil {
 		return err
 	}
 
 	// Create New RoleBinding for Snapshot
-	if err := c.createRoleBinding(mysql, mysql.SnapshotSAName()); err != nil {
+	if err := c.createRoleBinding(mariadb, mariadb.SnapshotSAName()); err != nil {
 		return err
 	}
 

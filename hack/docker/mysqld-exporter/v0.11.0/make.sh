@@ -3,9 +3,9 @@ set -xeou pipefail
 
 DOCKER_REGISTRY=${DOCKER_REGISTRY:-kubedb}
 IMG_REGISTRY=prom
-IMG=mysqld-exporter
+IMG=mariadbd-exporter
 TAG=v0.11.0
-# Available image tags: https://hub.docker.com/r/prom/mysqld-exporter/tags/
+# Available image tags: https://hub.docker.com/r/prom/mariadbd-exporter/tags/
 
 docker pull $IMG_REGISTRY/$IMG:$TAG
 

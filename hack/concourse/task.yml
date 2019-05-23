@@ -7,8 +7,8 @@ image_resource:
     tag: latest
 
 inputs:
-- name: mysql
+- name: mariadb
 - name: creds
 
 run:
-  path: mysql/hack/concourse/test.sh
+  path: mariadb/hack/concourse/test.sh

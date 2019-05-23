@@ -24,25 +24,25 @@ import (
 	hookapi "kmodules.xyz/webhook-runtime/admission/v1beta1"
 )
 
-type MySQLMutator struct {
+type MariaDBMutator struct {
 	client      kubernetes.Interface
 	extClient   cs.Interface
 	lock        sync.RWMutex
 	initialized bool
 }
 
-var _ hookapi.AdmissionHook = &MySQLMutator{}
+var _ hookapi.AdmissionHook = &MariaDBMutator{}
 
-func (a *MySQLMutator) Resource() (plural schema.GroupVersionResource, singular string) {
+func (a *MariaDBMutator) Resource() (plural schema.GroupVersionResource, singular string) {
 	return schema.GroupVersionResource{
 			Group:    "mutators.kubedb.com",
 			Version:  "v1alpha1",
-			Resource: "mysqlmutators",
+			Resource: "mariadbmutators",
 		},
-		"mysqlmutator"
+		"mariadbmutator"
 }
 
-func (a *MySQLMutator) Initialize(config *rest.Config, stopCh <-chan struct{}) error {
+func (a *MariaDBMutator) Initialize(config *rest.Config, stopCh <-chan struct{}) error {
 	a.lock.Lock()
 	defer a.lock.Unlock()
 
@@ -58,14 +58,14 @@ func (a *MySQLMutator) Initialize(config *rest.Config, stopCh <-chan struct{}) e
 	return err
 }
 
-func (a *MySQLMutator) Admit(req *admission.AdmissionRequest) *admission.AdmissionResponse {
+func (a *MariaDBMutator) Admit(req *admission.AdmissionRequest) *admission.AdmissionResponse {
 	status := &admission.AdmissionResponse{}
 
 	// N.B.: No Mutating for delete
 	if (req.Operation != admission.Create && req.Operation != admission.Update) ||
 		len(req.SubResource) != 0 ||
 		req.Kind.Group != api.SchemeGroupVersion.Group ||
-		req.Kind.Kind != api.ResourceKindMySQL {
+		req.Kind.Kind != api.ResourceKindMariaDB {
 		status.Allowed = true
 		return status
 	}
@@ -79,11 +79,11 @@ func (a *MySQLMutator) Admit(req *admission.AdmissionRequest) *admission.Admissi
 	if err != nil {
 		return hookapi.StatusBadRequest(err)
 	}
-	mysqlMod, err := setDefaultValues(a.client, a.extClient, obj.(*api.MySQL).DeepCopy())
+	mariadbMod, err := setDefaultValues(a.client, a.extClient, obj.(*api.MariaDB).DeepCopy())
 	if err != nil {
 		return hookapi.StatusForbidden(err)
-	} else if mysqlMod != nil {
-		patch, err := meta_util.CreateJSONPatch(req.Object.Raw, mysqlMod)
+	} else if mariadbMod != nil {
+		patch, err := meta_util.CreateJSONPatch(req.Object.Raw, mariadbMod)
 		if err != nil {
 			return hookapi.StatusInternalServerError(err)
 		}
@@ -96,48 +96,48 @@ func (a *MySQLMutator) Admit(req *admission.AdmissionRequest) *admission.Admissi
 	return status
 }
 
-// setDefaultValues provides the defaulting that is performed in mutating stage of creating/updating a MySQL database
-func setDefaultValues(client kubernetes.Interface, extClient cs.Interface, mysql *api.MySQL) (runtime.Object, error) {
-	if mysql.Spec.Version == "" {
+// setDefaultValues provides the defaulting that is performed in mutating stage of creating/updating a MariaDB database
+func setDefaultValues(client kubernetes.Interface, extClient cs.Interface, mariadb *api.MariaDB) (runtime.Object, error) {
+	if mariadb.Spec.Version == "" {
 		return nil, errors.New(`'spec.version' is missing`)
 	}
 
-	if mysql.Spec.Topology != nil && mysql.Spec.Topology.Mode != nil &&
-		*mysql.Spec.Topology.Mode == api.MySQLClusterModeGroup {
-		if mysql.Spec.Topology.Group == nil {
-			mysql.Spec.Topology.Group = &api.MySQLGroupSpec{}
+	if mariadb.Spec.Topology != nil && mariadb.Spec.Topology.Mode != nil &&
+		*mariadb.Spec.Topology.Mode == api.MariaDBClusterModeGroup {
+		if mariadb.Spec.Topology.Group == nil {
+			mariadb.Spec.Topology.Group = &api.MariaDBGroupSpec{}
 		}
 
-		if mysql.Spec.Topology.Group.Name == "" {
+		if mariadb.Spec.Topology.Group.Name == "" {
 			grName, err := uuid.NewRandom()
 			if err != nil {
 				return nil, errors.New("failed to generate a new group name")
 			}
-			mysql.Spec.Topology.Group.Name = grName.String()
+			mariadb.Spec.Topology.Group.Name = grName.String()
 		}
 
-		if mysql.Spec.Topology.Group.BaseServerID == nil {
-			mysql.Spec.Topology.Group.BaseServerID = types.UIntP(api.MySQLDefaultBaseServerID)
+		if mariadb.Spec.Topology.Group.BaseServerID == nil {
+			mariadb.Spec.Topology.Group.BaseServerID = types.UIntP(api.MariaDBDefaultBaseServerID)
 		}
 	}
 
-	mysql.SetDefaults()
+	mariadb.SetDefaults()
 
-	if err := setDefaultsFromDormantDB(extClient, mysql); err != nil {
+	if err := setDefaultsFromDormantDB(extClient, mariadb); err != nil {
 		return nil, err
 	}
 
 	// If monitoring spec is given without port,
 	// set default Listening port
-	setMonitoringPort(mysql)
+	setMonitoringPort(mariadb)
 
-	return mysql, nil
+	return mariadb, nil
 }
 
 // setDefaultsFromDormantDB takes values from Similar Dormant Database
-func setDefaultsFromDormantDB(extClient cs.Interface, mysql *api.MySQL) error {
+func setDefaultsFromDormantDB(extClient cs.Interface, mariadb *api.MariaDB) error {
 	// Check if DormantDatabase exists or not
-	dormantDb, err := extClient.KubedbV1alpha1().DormantDatabases(mysql.Namespace).Get(mysql.Name, metav1.GetOptions{})
+	dormantDb, err := extClient.KubedbV1alpha1().DormantDatabases(mariadb.Namespace).Get(mariadb.Name, metav1.GetOptions{})
 	if err != nil {
 		if !kerr.IsNotFound(err) {
 			return err
@@ -146,52 +146,52 @@ func setDefaultsFromDormantDB(extClient cs.Interface, mysql *api.MySQL) error {
 	}
 
 	// Check DatabaseKind
-	if value, _ := meta_util.GetStringValue(dormantDb.Labels, api.LabelDatabaseKind); value != api.ResourceKindMySQL {
-		return errors.New(fmt.Sprintf(`invalid MySQL: "%v/%v". Exists DormantDatabase "%v/%v" of different Kind`, mysql.Namespace, mysql.Name, dormantDb.Namespace, dormantDb.Name))
+	if value, _ := meta_util.GetStringValue(dormantDb.Labels, api.LabelDatabaseKind); value != api.ResourceKindMariaDB {
+		return errors.New(fmt.Sprintf(`invalid MariaDB: "%v/%v". Exists DormantDatabase "%v/%v" of different Kind`, mariadb.Namespace, mariadb.Name, dormantDb.Namespace, dormantDb.Name))
 	}
 
 	// Check Origin Spec
-	ddbOriginSpec := dormantDb.Spec.Origin.Spec.MySQL
+	ddbOriginSpec := dormantDb.Spec.Origin.Spec.MariaDB
 	ddbOriginSpec.SetDefaults()
 
 	// If DatabaseSecret of new object is not given,
 	// Take dormantDatabaseSecretName
-	if mysql.Spec.DatabaseSecret == nil {
-		mysql.Spec.DatabaseSecret = ddbOriginSpec.DatabaseSecret
+	if mariadb.Spec.DatabaseSecret == nil {
+		mariadb.Spec.DatabaseSecret = ddbOriginSpec.DatabaseSecret
 	}
 
 	// If Monitoring Spec of new object is not given,
 	// Take Monitoring Settings from Dormant
-	if mysql.Spec.Monitor == nil {
-		mysql.Spec.Monitor = ddbOriginSpec.Monitor
+	if mariadb.Spec.Monitor == nil {
+		mariadb.Spec.Monitor = ddbOriginSpec.Monitor
 	} else {
-		ddbOriginSpec.Monitor = mysql.Spec.Monitor
+		ddbOriginSpec.Monitor = mariadb.Spec.Monitor
 	}
 
 	// If Backup Scheduler of new object is not given,
 	// Take Backup Scheduler Settings from Dormant
-	if mysql.Spec.BackupSchedule == nil {
-		mysql.Spec.BackupSchedule = ddbOriginSpec.BackupSchedule
+	if mariadb.Spec.BackupSchedule == nil {
+		mariadb.Spec.BackupSchedule = ddbOriginSpec.BackupSchedule
 	} else {
-		ddbOriginSpec.BackupSchedule = mysql.Spec.BackupSchedule
+		ddbOriginSpec.BackupSchedule = mariadb.Spec.BackupSchedule
 	}
 
 	// Skip checking UpdateStrategy
-	ddbOriginSpec.UpdateStrategy = mysql.Spec.UpdateStrategy
+	ddbOriginSpec.UpdateStrategy = mariadb.Spec.UpdateStrategy
 
 	// Skip checking TerminationPolicy
-	ddbOriginSpec.TerminationPolicy = mysql.Spec.TerminationPolicy
+	ddbOriginSpec.TerminationPolicy = mariadb.Spec.TerminationPolicy
 
-	if !meta_util.Equal(ddbOriginSpec, &mysql.Spec) {
-		diff := meta_util.Diff(ddbOriginSpec, &mysql.Spec)
-		log.Errorf("mysql spec mismatches with OriginSpec in DormantDatabases. Diff: %v", diff)
-		return errors.New(fmt.Sprintf("mysql spec mismatches with OriginSpec in DormantDatabases. Diff: %v", diff))
+	if !meta_util.Equal(ddbOriginSpec, &mariadb.Spec) {
+		diff := meta_util.Diff(ddbOriginSpec, &mariadb.Spec)
+		log.Errorf("mariadb spec mismatches with OriginSpec in DormantDatabases. Diff: %v", diff)
+		return errors.New(fmt.Sprintf("mariadb spec mismatches with OriginSpec in DormantDatabases. Diff: %v", diff))
 	}
 
-	if _, err := meta_util.GetString(mysql.Annotations, api.AnnotationInitialized); err == kutil.ErrNotFound &&
-		mysql.Spec.Init != nil &&
-		mysql.Spec.Init.SnapshotSource != nil {
-		mysql.Annotations = core_util.UpsertMap(mysql.Annotations, map[string]string{
+	if _, err := meta_util.GetString(mariadb.Annotations, api.AnnotationInitialized); err == kutil.ErrNotFound &&
+		mariadb.Spec.Init != nil &&
+		mariadb.Spec.Init.SnapshotSource != nil {
+		mariadb.Annotations = core_util.UpsertMap(mariadb.Annotations, map[string]string{
 			api.AnnotationInitialized: "",
 		})
 	}
@@ -203,14 +203,14 @@ func setDefaultsFromDormantDB(extClient cs.Interface, mysql *api.MySQL) error {
 
 // Assign Default Monitoring Port if MonitoringSpec Exists
 // and the AgentVendor is Prometheus.
-func setMonitoringPort(mysql *api.MySQL) {
-	if mysql.Spec.Monitor != nil &&
-		mysql.GetMonitoringVendor() == mona.VendorPrometheus {
-		if mysql.Spec.Monitor.Prometheus == nil {
-			mysql.Spec.Monitor.Prometheus = &mona.PrometheusSpec{}
+func setMonitoringPort(mariadb *api.MariaDB) {
+	if mariadb.Spec.Monitor != nil &&
+		mariadb.GetMonitoringVendor() == mona.VendorPrometheus {
+		if mariadb.Spec.Monitor.Prometheus == nil {
+			mariadb.Spec.Monitor.Prometheus = &mona.PrometheusSpec{}
 		}
-		if mysql.Spec.Monitor.Prometheus.Port == 0 {
-			mysql.Spec.Monitor.Prometheus.Port = api.PrometheusExporterPortNumber
+		if mariadb.Spec.Monitor.Prometheus.Port == 0 {
+			mariadb.Spec.Monitor.Prometheus.Port = api.PrometheusExporterPortNumber
 		}
 	}
 }

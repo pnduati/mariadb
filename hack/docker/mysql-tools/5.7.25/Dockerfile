@@ -1,4 +1,4 @@
-FROM mysql:5.7.25
+FROM mariadb:5.7.25
 
 RUN set -x \
   && apt-get update \
@@ -8,6 +8,6 @@ RUN set -x \
   && rm -rf /var/lib/apt/lists/* /usr/share/doc /usr/share/man /tmp/*
 
 COPY osm /usr/local/bin/osm
-COPY mysql-tools.sh /usr/local/bin/mysql-tools.sh
+COPY mariadb-tools.sh /usr/local/bin/mariadb-tools.sh
 
-ENTRYPOINT ["mysql-tools.sh"]
+ENTRYPOINT ["mariadb-tools.sh"]

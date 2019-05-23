@@ -13,58 +13,58 @@ import (
 )
 
 const (
-	mysqlUser = "root"
+	mariadbUser = "root"
 
-	KeyMySQLUser     = "username"
-	KeyMySQLPassword = "password"
+	KeyMariaDBUser     = "username"
+	KeyMariaDBPassword = "password"
 )
 
-func (c *Controller) ensureDatabaseSecret(mysql *api.MySQL) error {
-	if mysql.Spec.DatabaseSecret == nil {
-		secretVolumeSource, err := c.createDatabaseSecret(mysql)
+func (c *Controller) ensureDatabaseSecret(mariadb *api.MariaDB) error {
+	if mariadb.Spec.DatabaseSecret == nil {
+		secretVolumeSource, err := c.createDatabaseSecret(mariadb)
 		if err != nil {
 			return err
 		}
 
-		ms, _, err := util.PatchMySQL(c.ExtClient.KubedbV1alpha1(), mysql, func(in *api.MySQL) *api.MySQL {
+		ms, _, err := util.PatchMariaDB(c.ExtClient.KubedbV1alpha1(), mariadb, func(in *api.MariaDB) *api.MariaDB {
 			in.Spec.DatabaseSecret = secretVolumeSource
 			return in
 		})
 		if err != nil {
 			return err
 		}
-		mysql.Spec.DatabaseSecret = ms.Spec.DatabaseSecret
+		mariadb.Spec.DatabaseSecret = ms.Spec.DatabaseSecret
 		return nil
 	}
-	return c.upgradeDatabaseSecret(mysql)
+	return c.upgradeDatabaseSecret(mariadb)
 }
 
-func (c *Controller) createDatabaseSecret(mysql *api.MySQL) (*core.SecretVolumeSource, error) {
-	authSecretName := mysql.Name + "-auth"
+func (c *Controller) createDatabaseSecret(mariadb *api.MariaDB) (*core.SecretVolumeSource, error) {
+	authSecretName := mariadb.Name + "-auth"
 
-	sc, err := c.checkSecret(authSecretName, mysql)
+	sc, err := c.checkSecret(authSecretName, mariadb)
 	if err != nil {
 		return nil, err
 	}
 	if sc == nil {
 		randPassword := ""
 
-		// if the password starts with "-", it will cause error in bash scripts (in mysql-tools)
+		// if the password starts with "-", it will cause error in bash scripts (in mariadb-tools)
 		for randPassword = rand.GeneratePassword(); randPassword[0] == '-'; {
 		}
 
 		secret := &core.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   authSecretName,
-				Labels: mysql.OffshootSelectors(),
+				Labels: mariadb.OffshootSelectors(),
 			},
 			Type: core.SecretTypeOpaque,
 			StringData: map[string]string{
-				KeyMySQLUser:     mysqlUser,
-				KeyMySQLPassword: randPassword,
+				KeyMariaDBUser:     mariadbUser,
+				KeyMariaDBPassword: randPassword,
 			},
 		}
-		if _, err := c.Client.CoreV1().Secrets(mysql.Namespace).Create(secret); err != nil {
+		if _, err := c.Client.CoreV1().Secrets(mariadb.Namespace).Create(secret); err != nil {
 			return nil, err
 		}
 	}
@@ -75,16 +75,16 @@ func (c *Controller) createDatabaseSecret(mysql *api.MySQL) (*core.SecretVolumeS
 
 // This is done to fix 0.8.0 -> 0.9.0 upgrade due to
 // https://github.com/kubedb/mariadb/pull/115/files#diff-10ddaf307bbebafda149db10a28b9c24R17 commit
-func (c *Controller) upgradeDatabaseSecret(mysql *api.MySQL) error {
+func (c *Controller) upgradeDatabaseSecret(mariadb *api.MariaDB) error {
 	meta := metav1.ObjectMeta{
-		Name:      mysql.Spec.DatabaseSecret.SecretName,
-		Namespace: mysql.Namespace,
+		Name:      mariadb.Spec.DatabaseSecret.SecretName,
+		Namespace: mariadb.Namespace,
 	}
 
 	_, _, err := core_util.CreateOrPatchSecret(c.Client, meta, func(in *core.Secret) *core.Secret {
-		if _, ok := in.Data[KeyMySQLUser]; !ok {
+		if _, ok := in.Data[KeyMariaDBUser]; !ok {
 			if val, ok2 := in.Data["user"]; ok2 {
-				in.StringData = map[string]string{KeyMySQLUser: string(val)}
+				in.StringData = map[string]string{KeyMariaDBUser: string(val)}
 			}
 		}
 		return in
@@ -92,8 +92,8 @@ func (c *Controller) upgradeDatabaseSecret(mysql *api.MySQL) error {
 	return err
 }
 
-func (c *Controller) checkSecret(secretName string, mysql *api.MySQL) (*core.Secret, error) {
-	secret, err := c.Client.CoreV1().Secrets(mysql.Namespace).Get(secretName, metav1.GetOptions{})
+func (c *Controller) checkSecret(secretName string, mariadb *api.MariaDB) (*core.Secret, error) {
+	secret, err := c.Client.CoreV1().Secrets(mariadb.Namespace).Get(secretName, metav1.GetOptions{})
 	if err != nil {
 		if kerr.IsNotFound(err) {
 			return nil, nil
@@ -101,9 +101,9 @@ func (c *Controller) checkSecret(secretName string, mysql *api.MySQL) (*core.Sec
 		return nil, err
 	}
 
-	if secret.Labels[api.LabelDatabaseKind] != api.ResourceKindMySQL ||
-		secret.Labels[api.LabelDatabaseName] != mysql.Name {
-		return nil, fmt.Errorf(`intended secret "%v/%v" already exists`, mysql.Namespace, secretName)
+	if secret.Labels[api.LabelDatabaseKind] != api.ResourceKindMariaDB ||
+		secret.Labels[api.LabelDatabaseName] != mariadb.Name {
+		return nil, fmt.Errorf(`intended secret "%v/%v" already exists`, mariadb.Namespace, secretName)
 	}
 	return secret, nil
 }

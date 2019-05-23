@@ -34,7 +34,7 @@ resources:
   tags: [cncf]
   source:
     owner: kubedb
-    repo: mysql
+    repo: mariadb
     label: ok-to-test/cncf
     # org: kubedb
     access_token: ((access_token))
@@ -44,7 +44,7 @@ resources:
   tags: [cncf]
   source:
     owner: kubedb
-    repo: mysql
+    repo: mariadb
     label: ok-to-test/gke
     access_token: ((access_token))
 
@@ -53,7 +53,7 @@ resources:
   tags: [cncf]
   source:
     owner: kubedb
-    repo: mysql
+    repo: mariadb
     label: ok-to-test/kops-aws
     access_token: ((access_token))
 
@@ -62,7 +62,7 @@ resources:
   tags: [cncf]
   source:
     owner: kubedb
-    repo: mysql
+    repo: mariadb
     label: ok-to-test/aks
     access_token: ((access_token))
 
@@ -71,7 +71,7 @@ resources:
   tags: [cncf]
   source:
     owner: kubedb
-    repo: mysql
+    repo: mariadb
     label: ok-to-test/acs
     access_token: ((access_token))
 
@@ -80,7 +80,7 @@ resources:
   tags: [cncf]
   source:
     owner: kubedb
-    repo: mysql
+    repo: mariadb
     label: ok-to-test/do
     access_token: ((access_token))
 
@@ -89,7 +89,7 @@ resources:
   tags: [cncf]
   source:
     owner: kubedb
-    repo: mysql
+    repo: mariadb
     label: ok-to-test/kubespray
     access_token: ((access_token))
 
@@ -129,7 +129,7 @@ jobs:
     privileged: true
     file: master/hack/concourse/task.yml
     input_mapping:
-      mysql: master
+      mariadb: master
     params:
       ClusterProvider: cncf
       DOCKER_USER: ((docker_user))
@@ -167,7 +167,7 @@ jobs:
     privileged: true
     file: cncf/hack/concourse/task.yml
     input_mapping:
-      mysql: cncf
+      mariadb: cncf
     tags: [cncf]
     params:
       ClusterProvider: cncf
@@ -198,7 +198,7 @@ jobs:
     privileged: true
     file: gke/hack/concourse/task.yml
     input_mapping:
-      mysql: gke
+      mariadb: gke
     params:
       ClusterProvider: gke
       DOCKER_USER: ((docker_user))
@@ -224,7 +224,7 @@ jobs:
     privileged: true
     file: aws/hack/concourse/task.yml
     input_mapping:
-      mysql: aws
+      mariadb: aws
     params:
       KOPS_AWS_ACCESS_KEY_ID: ((kops_aws_access_key_id))
       KOPS_AWS_SECRET_ACCESS_KEY: ((kops_aws_secret_access_key))
@@ -252,7 +252,7 @@ jobs:
     privileged: true
     file: azure-aks/hack/concourse/task.yml
     input_mapping:
-      mysql: azure-aks
+      mariadb: azure-aks
     params:
       ClusterProvider: aks
       APP_ID: ((azure_app_id))
@@ -281,7 +281,7 @@ jobs:
     privileged: true
     file: azure-acs/hack/concourse/task.yml
     input_mapping:
-      mysql: azure-acs
+      mariadb: azure-acs
     params:
       ClusterProvider: acs
       APP_ID: ((azure_app_id))
@@ -310,7 +310,7 @@ jobs:
     privileged: true
     file: do/hack/concourse/task.yml
     input_mapping:
-      mysql: do
+      mariadb: do
     params:
       ClusterProvider: digitalocean
       DOCKER_USER: ((docker_user))
@@ -336,7 +336,7 @@ jobs:
     privileged: true
     file: kubespray/hack/concourse/task.yml
     input_mapping:
-      mysql: kubespray
+      mariadb: kubespray
     params:
       DOCKER_USER: ((docker_user))
       DOCKER_PASS: ((docker_pass))

@@ -14,20 +14,20 @@ import (
 )
 
 func (c *Controller) GetDatabase(meta metav1.ObjectMeta) (runtime.Object, error) {
-	mysql, err := c.myLister.MySQLs(meta.Namespace).Get(meta.Name)
+	mariadb, err := c.myLister.MariaDBs(meta.Namespace).Get(meta.Name)
 	if err != nil {
 		return nil, err
 	}
 
-	return mysql, nil
+	return mariadb, nil
 }
 
 func (c *Controller) SetDatabaseStatus(meta metav1.ObjectMeta, phase api.DatabasePhase, reason string) error {
-	mysql, err := c.myLister.MySQLs(meta.Namespace).Get(meta.Name)
+	mariadb, err := c.myLister.MariaDBs(meta.Namespace).Get(meta.Name)
 	if err != nil {
 		return err
 	}
-	_, err = util.UpdateMySQLStatus(c.ExtClient.KubedbV1alpha1(), mysql, func(in *api.MySQLStatus) *api.MySQLStatus {
+	_, err = util.UpdateMariaDBStatus(c.ExtClient.KubedbV1alpha1(), mariadb, func(in *api.MariaDBStatus) *api.MariaDBStatus {
 		in.Phase = phase
 		in.Reason = reason
 		return in
@@ -36,13 +36,13 @@ func (c *Controller) SetDatabaseStatus(meta metav1.ObjectMeta, phase api.Databas
 }
 
 func (c *Controller) UpsertDatabaseAnnotation(meta metav1.ObjectMeta, annotation map[string]string) error {
-	mysql, err := c.myLister.MySQLs(meta.Namespace).Get(meta.Name)
+	mariadb, err := c.myLister.MariaDBs(meta.Namespace).Get(meta.Name)
 	if err != nil {
 		return err
 	}
 
-	_, _, err = util.PatchMySQL(c.ExtClient.KubedbV1alpha1(), mysql, func(in *api.MySQL) *api.MySQL {
-		in.Annotations = core_util.UpsertMap(mysql.Annotations, annotation)
+	_, _, err = util.PatchMariaDB(c.ExtClient.KubedbV1alpha1(), mariadb, func(in *api.MariaDB) *api.MariaDB {
+		in.Annotations = core_util.UpsertMap(mariadb.Annotations, annotation)
 		return in
 	})
 	return err
@@ -55,7 +55,7 @@ func (c *Controller) ValidateSnapshot(snapshot *api.Snapshot) error {
 		return fmt.Errorf(`object 'DatabaseName' is missing in '%v'`, snapshot.Spec)
 	}
 
-	if _, err := c.myLister.MySQLs(snapshot.Namespace).Get(databaseName); err != nil {
+	if _, err := c.myLister.MariaDBs(snapshot.Namespace).Get(databaseName); err != nil {
 		return err
 	}
 

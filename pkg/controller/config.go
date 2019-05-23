@@ -46,7 +46,7 @@ func (c *OperatorConfig) New() (*Controller, error) {
 		return nil, err
 	}
 
-	recorder := eventer.NewEventRecorder(c.KubeClient, "MySQL operator")
+	recorder := eventer.NewEventRecorder(c.KubeClient, "MariaDB operator")
 
 	ctrl := New(
 		c.ClientConfig,

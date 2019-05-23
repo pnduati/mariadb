@@ -44,8 +44,8 @@ func New(
 		extClient:        extClient,
 		kaClient:         kaClient,
 		appCatalogClient: appCatalogClient,
-		name:             "mysql-operator",
-		namespace:        rand.WithUniqSuffix(api.ResourceSingularMySQL),
+		name:             "mariadb-operator",
+		namespace:        rand.WithUniqSuffix(api.ResourceSingularMariaDB),
 		StorageClass:     storageClass,
 	}
 }
@@ -53,7 +53,7 @@ func New(
 func (f *Framework) Invoke() *Invocation {
 	return &Invocation{
 		Framework: f,
-		app:       rand.WithUniqSuffix("mysql-e2e"),
+		app:       rand.WithUniqSuffix("mariadb-e2e"),
 	}
 }
 

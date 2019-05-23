@@ -3,7 +3,7 @@
 set -eoux pipefail
 
 ORG_NAME=kubedb
-REPO_NAME=mysql
+REPO_NAME=mariadb
 OPERATOR_NAME=maria-operator
 APP_LABEL=kubedb #required for `kubectl describe deploy -n kube-system -l app=$APP_LABEL`
 

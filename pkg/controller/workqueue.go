@@ -10,13 +10,13 @@ import (
 )
 
 func (c *Controller) initWatcher() {
-	c.myInformer = c.KubedbInformerFactory.Kubedb().V1alpha1().MySQLs().Informer()
-	c.myQueue = queue.New("MySQL", c.MaxNumRequeues, c.NumThreads, c.runMySQL)
-	c.myLister = c.KubedbInformerFactory.Kubedb().V1alpha1().MySQLs().Lister()
+	c.myInformer = c.KubedbInformerFactory.Kubedb().V1alpha1().MariaDBs().Informer()
+	c.myQueue = queue.New("MariaDB", c.MaxNumRequeues, c.NumThreads, c.runMariaDB)
+	c.myLister = c.KubedbInformerFactory.Kubedb().V1alpha1().MariaDBs().Lister()
 	c.myInformer.AddEventHandler(queue.NewObservableUpdateHandler(c.myQueue.GetQueue(), apis.EnableStatusSubresource))
 }
 
-func (c *Controller) runMySQL(key string) error {
+func (c *Controller) runMariaDB(key string) error {
 	log.Debugln("started processing, key:", key)
 	obj, exists, err := c.myInformer.GetIndexer().GetByKey(key)
 	if err != nil {
@@ -25,34 +25,34 @@ func (c *Controller) runMySQL(key string) error {
 	}
 
 	if !exists {
-		log.Debugf("MySQL %s does not exist anymore", key)
+		log.Debugf("MariaDB %s does not exist anymore", key)
 	} else {
 		// Note that you also have to check the uid if you have a local controlled resource, which
-		// is dependent on the actual instance, to detect that a MySQL was recreated with the same name
-		mysql := obj.(*api.MySQL).DeepCopy()
-		if mysql.DeletionTimestamp != nil {
-			if core_util.HasFinalizer(mysql.ObjectMeta, api.GenericKey) {
-				if err := c.terminate(mysql); err != nil {
+		// is dependent on the actual instance, to detect that a MariaDB was recreated with the same name
+		mariadb := obj.(*api.MariaDB).DeepCopy()
+		if mariadb.DeletionTimestamp != nil {
+			if core_util.HasFinalizer(mariadb.ObjectMeta, api.GenericKey) {
+				if err := c.terminate(mariadb); err != nil {
 					log.Errorln(err)
 					return err
 				}
-				mysql, _, err = util.PatchMySQL(c.ExtClient.KubedbV1alpha1(), mysql, func(in *api.MySQL) *api.MySQL {
+				mariadb, _, err = util.PatchMariaDB(c.ExtClient.KubedbV1alpha1(), mariadb, func(in *api.MariaDB) *api.MariaDB {
 					in.ObjectMeta = core_util.RemoveFinalizer(in.ObjectMeta, api.GenericKey)
 					return in
 				})
 				return err
 			}
 		} else {
-			mysql, _, err = util.PatchMySQL(c.ExtClient.KubedbV1alpha1(), mysql, func(in *api.MySQL) *api.MySQL {
+			mariadb, _, err = util.PatchMariaDB(c.ExtClient.KubedbV1alpha1(), mariadb, func(in *api.MariaDB) *api.MariaDB {
 				in.ObjectMeta = core_util.AddFinalizer(in.ObjectMeta, api.GenericKey)
 				return in
 			})
 			if err != nil {
 				return err
 			}
-			if err := c.create(mysql); err != nil {
+			if err := c.create(mariadb); err != nil {
 				log.Errorln(err)
-				c.pushFailureEvent(mysql, err.Error())
+				c.pushFailureEvent(mariadb, err.Error())
 				return err
 			}
 		}

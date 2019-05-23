@@ -3,7 +3,7 @@ set -xeou pipefail
 
 DOCKER_REGISTRY=${DOCKER_REGISTRY:-kubedb}
 
-IMG=mysql
+IMG=mariadb
 
 DB_VERSION=8.0.3
 TAG="$DB_VERSION"

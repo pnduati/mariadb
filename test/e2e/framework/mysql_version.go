@@ -9,47 +9,47 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func (i *Invocation) MySQLVersion() *api.MySQLVersion {
-	return &api.MySQLVersion{
+func (i *Invocation) MariaDBVersion() *api.MariaDBVersion {
+	return &api.MariaDBVersion{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: DBVersion,
 			Labels: map[string]string{
 				"app": i.app,
 			},
 		},
-		Spec: api.MySQLVersionSpec{
+		Spec: api.MariaDBVersionSpec{
 			Version: DBVersion,
-			DB: api.MySQLVersionDatabase{
-				Image: fmt.Sprintf("%s/mysql:%s", DockerRegistry, DBVersion),
+			DB: api.MariaDBVersionDatabase{
+				Image: fmt.Sprintf("%s/mariadb:%s", DockerRegistry, DBVersion),
 			},
-			Exporter: api.MySQLVersionExporter{
-				Image: fmt.Sprintf("%s/mysqld-exporter:%s", DockerRegistry, ExporterTag),
+			Exporter: api.MariaDBVersionExporter{
+				Image: fmt.Sprintf("%s/mariadbd-exporter:%s", DockerRegistry, ExporterTag),
 			},
-			Tools: api.MySQLVersionTools{
-				Image: fmt.Sprintf("%s/mysql-tools:%s", DockerRegistry, DBToolsTag),
+			Tools: api.MariaDBVersionTools{
+				Image: fmt.Sprintf("%s/mariadb-tools:%s", DockerRegistry, DBToolsTag),
 			},
-			InitContainer: api.MySQLVersionInitContainer{
+			InitContainer: api.MariaDBVersionInitContainer{
 				Image: "kubedb/busybox",
 			},
-			PodSecurityPolicies: api.MySQLVersionPodSecurityPolicy{
-				SnapshotterPolicyName: "mysql-snapshot",
-				DatabasePolicyName:    "mysql-db",
+			PodSecurityPolicies: api.MariaDBVersionPodSecurityPolicy{
+				SnapshotterPolicyName: "mariadb-snapshot",
+				DatabasePolicyName:    "mariadb-db",
 			},
 		},
 	}
 }
 
-func (f *Framework) CreateMySQLVersion(obj *api.MySQLVersion) error {
-	_, err := f.extClient.CatalogV1alpha1().MySQLVersions().Create(obj)
+func (f *Framework) CreateMariaDBVersion(obj *api.MariaDBVersion) error {
+	_, err := f.extClient.CatalogV1alpha1().MariaDBVersions().Create(obj)
 	if err != nil && kerr.IsAlreadyExists(err) {
-		e2 := f.extClient.CatalogV1alpha1().MySQLVersions().Delete(obj.Name, &metav1.DeleteOptions{})
+		e2 := f.extClient.CatalogV1alpha1().MariaDBVersions().Delete(obj.Name, &metav1.DeleteOptions{})
 		Expect(e2).NotTo(HaveOccurred())
-		_, e2 = f.extClient.CatalogV1alpha1().MySQLVersions().Create(obj)
+		_, e2 = f.extClient.CatalogV1alpha1().MariaDBVersions().Create(obj)
 		return e2
 	}
 	return nil
 }
 
-func (f *Framework) DeleteMySQLVersion(meta metav1.ObjectMeta) error {
-	return f.extClient.CatalogV1alpha1().MySQLVersions().Delete(meta.Name, &metav1.DeleteOptions{})
+func (f *Framework) DeleteMariaDBVersion(meta metav1.ObjectMeta) error {
+	return f.extClient.CatalogV1alpha1().MariaDBVersions().Delete(meta.Name, &metav1.DeleteOptions{})
 }

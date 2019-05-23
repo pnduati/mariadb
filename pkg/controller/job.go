@@ -16,17 +16,17 @@ const (
 	snapshotDumpDir = "/var/data"
 )
 
-func (c *Controller) createRestoreJob(mysql *api.MySQL, snapshot *api.Snapshot) (*batch.Job, error) {
-	mysqlVersion, err := c.ExtClient.CatalogV1alpha1().MySQLVersions().Get(string(mysql.Spec.Version), metav1.GetOptions{})
+func (c *Controller) createRestoreJob(mariadb *api.MariaDB, snapshot *api.Snapshot) (*batch.Job, error) {
+	mariadbVersion, err := c.ExtClient.CatalogV1alpha1().MariaDBVersions().Get(string(mariadb.Spec.Version), metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 	jobName := fmt.Sprintf("%s-%s", api.DatabaseNamePrefix, snapshot.OffshootName())
-	jobLabel := mysql.OffshootLabels()
+	jobLabel := mariadb.OffshootLabels()
 	if jobLabel == nil {
 		jobLabel = map[string]string{}
 	}
-	jobLabel[api.LabelDatabaseKind] = api.ResourceKindMySQL
+	jobLabel[api.LabelDatabaseKind] = api.ResourceKindMariaDB
 	jobLabel[api.AnnotationJobType] = api.JobTypeRestore
 
 	backupSpec := snapshot.Spec.Backend
@@ -38,11 +38,11 @@ func (c *Controller) createRestoreJob(mysql *api.MySQL, snapshot *api.Snapshot) 
 	// Get PersistentVolume object for Backup Util pod.
 	pvcSpec := snapshot.Spec.PodVolumeClaimSpec
 	if pvcSpec == nil {
-		pvcSpec = mysql.Spec.Storage
+		pvcSpec = mariadb.Spec.Storage
 	}
 	st := snapshot.Spec.StorageType
 	if st == nil {
-		st = &mysql.Spec.StorageType
+		st = &mariadb.Spec.StorageType
 	}
 	persistentVolume, err := c.GetVolumeForSnapshot(*st, pvcSpec, jobName, snapshot.Namespace)
 	if err != nil {
@@ -63,9 +63,9 @@ func (c *Controller) createRestoreJob(mysql *api.MySQL, snapshot *api.Snapshot) 
 			OwnerReferences: []metav1.OwnerReference{
 				{
 					APIVersion: api.SchemeGroupVersion.String(),
-					Kind:       api.ResourceKindMySQL,
-					Name:       mysql.Name,
-					UID:        mysql.UID,
+					Kind:       api.ResourceKindMariaDB,
+					Name:       mariadb.Name,
+					UID:        mariadb.UID,
 				},
 			},
 		},
@@ -78,17 +78,17 @@ func (c *Controller) createRestoreJob(mysql *api.MySQL, snapshot *api.Snapshot) 
 					Containers: []core.Container{
 						{
 							Name:  api.JobTypeRestore,
-							Image: mysqlVersion.Spec.Tools.Image,
+							Image: mariadbVersion.Spec.Tools.Image,
 							Args: append([]string{
 								api.JobTypeRestore,
-								fmt.Sprintf(`--host=%s`, mysql.ServiceName()),
+								fmt.Sprintf(`--host=%s`, mariadb.ServiceName()),
 								fmt.Sprintf(`--data-dir=%s`, snapshotDumpDir),
 								fmt.Sprintf(`--bucket=%s`, bucket),
 								fmt.Sprintf(`--folder=%s`, folderName),
 								fmt.Sprintf(`--snapshot=%s`, snapshot.Name),
 								fmt.Sprintf(`--enable-analytics=%v`, c.EnableAnalytics),
 								"--",
-							}, mysql.Spec.Init.SnapshotSource.Args...),
+							}, mariadb.Spec.Init.SnapshotSource.Args...),
 							Env: core_util.UpsertEnvVars([]core.EnvVar{
 								{
 									Name:  analytics.Key,
@@ -99,9 +99,9 @@ func (c *Controller) createRestoreJob(mysql *api.MySQL, snapshot *api.Snapshot) 
 									ValueFrom: &core.EnvVarSource{
 										SecretKeyRef: &core.SecretKeySelector{
 											LocalObjectReference: core.LocalObjectReference{
-												Name: mysql.Spec.DatabaseSecret.SecretName,
+												Name: mariadb.Spec.DatabaseSecret.SecretName,
 											},
-											Key: KeyMySQLUser,
+											Key: KeyMariaDBUser,
 										},
 									},
 								},
@@ -110,9 +110,9 @@ func (c *Controller) createRestoreJob(mysql *api.MySQL, snapshot *api.Snapshot) 
 									ValueFrom: &core.EnvVarSource{
 										SecretKeyRef: &core.SecretKeySelector{
 											LocalObjectReference: core.LocalObjectReference{
-												Name: mysql.Spec.DatabaseSecret.SecretName,
+												Name: mariadb.Spec.DatabaseSecret.SecretName,
 											},
-											Key: KeyMySQLPassword,
+											Key: KeyMariaDBPassword,
 										},
 									},
 								},
@@ -158,7 +158,7 @@ func (c *Controller) createRestoreJob(mysql *api.MySQL, snapshot *api.Snapshot) 
 					SecurityContext:   snapshot.Spec.PodTemplate.Spec.SecurityContext,
 					ImagePullSecrets: core_util.MergeLocalObjectReferences(
 						snapshot.Spec.PodTemplate.Spec.ImagePullSecrets,
-						mysql.Spec.PodTemplate.Spec.ImagePullSecrets,
+						mariadb.Spec.PodTemplate.Spec.ImagePullSecrets,
 					),
 				},
 			},
@@ -178,28 +178,28 @@ func (c *Controller) createRestoreJob(mysql *api.MySQL, snapshot *api.Snapshot) 
 	}
 
 	if c.EnableRBAC {
-		job.Spec.Template.Spec.ServiceAccountName = mysql.SnapshotSAName()
+		job.Spec.Template.Spec.ServiceAccountName = mariadb.SnapshotSAName()
 	}
 
-	return c.Client.BatchV1().Jobs(mysql.Namespace).Create(job)
+	return c.Client.BatchV1().Jobs(mariadb.Namespace).Create(job)
 }
 
 func (c *Controller) getSnapshotterJob(snapshot *api.Snapshot) (*batch.Job, error) {
-	mysql, err := c.myLister.MySQLs(snapshot.Namespace).Get(snapshot.Spec.DatabaseName)
+	mariadb, err := c.myLister.MariaDBs(snapshot.Namespace).Get(snapshot.Spec.DatabaseName)
 	if err != nil {
 		return nil, err
 	}
-	mysqlVersion, err := c.ExtClient.CatalogV1alpha1().MySQLVersions().Get(string(mysql.Spec.Version), metav1.GetOptions{})
+	mariadbVersion, err := c.ExtClient.CatalogV1alpha1().MariaDBVersions().Get(string(mariadb.Spec.Version), metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 
 	jobName := fmt.Sprintf("%s-%s", api.DatabaseNamePrefix, snapshot.OffshootName())
-	jobLabel := mysql.OffshootLabels()
+	jobLabel := mariadb.OffshootLabels()
 	if jobLabel == nil {
 		jobLabel = map[string]string{}
 	}
-	jobLabel[api.LabelDatabaseKind] = api.ResourceKindMySQL
+	jobLabel[api.LabelDatabaseKind] = api.ResourceKindMariaDB
 	jobLabel[api.AnnotationJobType] = api.JobTypeBackup
 
 	backupSpec := snapshot.Spec.Backend
@@ -216,11 +216,11 @@ func (c *Controller) getSnapshotterJob(snapshot *api.Snapshot) (*batch.Job, erro
 	// Get PersistentVolume object for Backup Util pod.
 	pvcSpec := snapshot.Spec.PodVolumeClaimSpec
 	if pvcSpec == nil {
-		pvcSpec = mysql.Spec.Storage
+		pvcSpec = mariadb.Spec.Storage
 	}
 	st := snapshot.Spec.StorageType
 	if st == nil {
-		st = &mysql.Spec.StorageType
+		st = &mariadb.Spec.StorageType
 	}
 	persistentVolume, err := c.GetVolumeForSnapshot(*st, pvcSpec, jobName, snapshot.Namespace)
 	if err != nil {
@@ -256,10 +256,10 @@ func (c *Controller) getSnapshotterJob(snapshot *api.Snapshot) (*batch.Job, erro
 					Containers: []core.Container{
 						{
 							Name:  api.JobTypeBackup,
-							Image: mysqlVersion.Spec.Tools.Image,
+							Image: mariadbVersion.Spec.Tools.Image,
 							Args: append([]string{
 								api.JobTypeBackup,
-								fmt.Sprintf(`--host=%s`, mysql.ServiceName()),
+								fmt.Sprintf(`--host=%s`, mariadb.ServiceName()),
 								fmt.Sprintf(`--data-dir=%s`, snapshotDumpDir),
 								fmt.Sprintf(`--bucket=%s`, bucket),
 								fmt.Sprintf(`--folder=%s`, folderName),
@@ -277,9 +277,9 @@ func (c *Controller) getSnapshotterJob(snapshot *api.Snapshot) (*batch.Job, erro
 									ValueFrom: &core.EnvVarSource{
 										SecretKeyRef: &core.SecretKeySelector{
 											LocalObjectReference: core.LocalObjectReference{
-												Name: mysql.Spec.DatabaseSecret.SecretName,
+												Name: mariadb.Spec.DatabaseSecret.SecretName,
 											},
-											Key: KeyMySQLUser,
+											Key: KeyMariaDBUser,
 										},
 									},
 								},
@@ -288,9 +288,9 @@ func (c *Controller) getSnapshotterJob(snapshot *api.Snapshot) (*batch.Job, erro
 									ValueFrom: &core.EnvVarSource{
 										SecretKeyRef: &core.SecretKeySelector{
 											LocalObjectReference: core.LocalObjectReference{
-												Name: mysql.Spec.DatabaseSecret.SecretName,
+												Name: mariadb.Spec.DatabaseSecret.SecretName,
 											},
-											Key: KeyMySQLPassword,
+											Key: KeyMariaDBPassword,
 										},
 									},
 								},
@@ -336,7 +336,7 @@ func (c *Controller) getSnapshotterJob(snapshot *api.Snapshot) (*batch.Job, erro
 					SecurityContext:   snapshot.Spec.PodTemplate.Spec.SecurityContext,
 					ImagePullSecrets: core_util.MergeLocalObjectReferences(
 						snapshot.Spec.PodTemplate.Spec.ImagePullSecrets,
-						mysql.Spec.PodTemplate.Spec.ImagePullSecrets,
+						mariadb.Spec.PodTemplate.Spec.ImagePullSecrets,
 					),
 				},
 			},
@@ -355,7 +355,7 @@ func (c *Controller) getSnapshotterJob(snapshot *api.Snapshot) (*batch.Job, erro
 	}
 
 	if c.EnableRBAC {
-		job.Spec.Template.Spec.ServiceAccountName = mysql.SnapshotSAName()
+		job.Spec.Template.Spec.ServiceAccountName = mariadb.SnapshotSAName()
 	}
 
 	return job, nil

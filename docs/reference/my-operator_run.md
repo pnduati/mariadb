@@ -1,10 +1,10 @@
 ## maria-operator run
 
-Launch MySQL server
+Launch MariaDB server
 
 ### Synopsis
 
-Launch MySQL server
+Launch MariaDB server
 
 ```
 maria-operator run [flags]

@@ -21,21 +21,21 @@ import (
 )
 
 const (
-	S3_BUCKET_NAME       = "S3_BUCKET_NAME"
-	GCS_BUCKET_NAME      = "GCS_BUCKET_NAME"
-	AZURE_CONTAINER_NAME = "AZURE_CONTAINER_NAME"
-	SWIFT_CONTAINER_NAME = "SWIFT_CONTAINER_NAME"
-	MYSQL_DATABASE       = "MYSQL_DATABASE"
-	MYSQL_ROOT_PASSWORD  = "MYSQL_ROOT_PASSWORD"
+	S3_BUCKET_NAME        = "S3_BUCKET_NAME"
+	GCS_BUCKET_NAME       = "GCS_BUCKET_NAME"
+	AZURE_CONTAINER_NAME  = "AZURE_CONTAINER_NAME"
+	SWIFT_CONTAINER_NAME  = "SWIFT_CONTAINER_NAME"
+	MARIADB_DATABASE      = "MARIADB_DATABASE"
+	MARIADB_ROOT_PASSWORD = "MARIADB_ROOT_PASSWORD"
 )
 
-var _ = Describe("MySQL", func() {
+var _ = Describe("MariaDB", func() {
 	var (
 		err              error
 		f                *framework.Invocation
-		mysql            *api.MySQL
-		garbageMySQL     *api.MySQLList
-		mysqlVersion     *catalog.MySQLVersion
+		mariadb          *api.MariaDB
+		garbageMariaDB   *api.MariaDBList
+		mariadbVersion   *catalog.MariaDBVersion
 		snapshot         *api.Snapshot
 		secret           *core.Secret
 		skipMessage      string
@@ -45,79 +45,79 @@ var _ = Describe("MySQL", func() {
 
 	BeforeEach(func() {
 		f = root.Invoke()
-		mysql = f.MySQL()
-		garbageMySQL = new(api.MySQLList)
-		mysqlVersion = f.MySQLVersion()
+		mariadb = f.MariaDB()
+		garbageMariaDB = new(api.MariaDBList)
+		mariadbVersion = f.MariaDBVersion()
 		snapshot = f.Snapshot()
 		skipMessage = ""
 		skipDataChecking = true
-		dbName = "mysql"
+		dbName = "mariadb"
 	})
 
 	var createAndWaitForRunning = func() {
-		By("Create MySQLVersion: " + mysqlVersion.Name)
-		err = f.CreateMySQLVersion(mysqlVersion)
+		By("Create MariaDBVersion: " + mariadbVersion.Name)
+		err = f.CreateMariaDBVersion(mariadbVersion)
 		Expect(err).NotTo(HaveOccurred())
 
-		By("Create MySQL: " + mysql.Name)
-		err = f.CreateMySQL(mysql)
+		By("Create MariaDB: " + mariadb.Name)
+		err = f.CreateMariaDB(mariadb)
 		Expect(err).NotTo(HaveOccurred())
 
-		By("Wait for Running mysql")
-		f.EventuallyMySQLRunning(mysql.ObjectMeta).Should(BeTrue())
+		By("Wait for Running mariadb")
+		f.EventuallyMariaDBRunning(mariadb.ObjectMeta).Should(BeTrue())
 
 		By("Wait for AppBinding to create")
-		f.EventuallyAppBinding(mysql.ObjectMeta).Should(BeTrue())
+		f.EventuallyAppBinding(mariadb.ObjectMeta).Should(BeTrue())
 
 		By("Check valid AppBinding Specs")
-		err := f.CheckAppBindingSpec(mysql.ObjectMeta)
+		err := f.CheckAppBindingSpec(mariadb.ObjectMeta)
 		Expect(err).NotTo(HaveOccurred())
 
 		By("Waiting for database to be ready")
-		f.EventuallyDatabaseReady(mysql.ObjectMeta, dbName).Should(BeTrue())
+		f.EventuallyDatabaseReady(mariadb.ObjectMeta, dbName).Should(BeTrue())
 	}
 
 	var testGeneralBehaviour = func() {
 		if skipMessage != "" {
 			Skip(skipMessage)
 		}
-		// Create MySQL
+		// Create MariaDB
 		createAndWaitForRunning()
 
 		By("Creating Table")
-		f.EventuallyCreateTable(mysql.ObjectMeta, dbName).Should(BeTrue())
+		f.EventuallyCreateTable(mariadb.ObjectMeta, dbName).Should(BeTrue())
 
 		By("Inserting Rows")
-		f.EventuallyInsertRow(mysql.ObjectMeta, dbName, 0, 3).Should(BeTrue())
+		f.EventuallyInsertRow(mariadb.ObjectMeta, dbName, 0, 3).Should(BeTrue())
 
 		By("Checking Row Count of Table")
-		f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+		f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 
-		By("Delete mysql")
-		err = f.DeleteMySQL(mysql.ObjectMeta)
+		By("Delete mariadb")
+		err = f.DeleteMariaDB(mariadb.ObjectMeta)
 		Expect(err).NotTo(HaveOccurred())
 
-		By("Wait for mysql to be paused")
-		f.EventuallyDormantDatabaseStatus(mysql.ObjectMeta).Should(matcher.HavePaused())
+		By("Wait for mariadb to be paused")
+		f.EventuallyDormantDatabaseStatus(mariadb.ObjectMeta).Should(matcher.HavePaused())
 
-		// Create MySQL object again to resume it
-		By("Create MySQL: " + mysql.Name)
-		err = f.CreateMySQL(mysql)
+		// Create MariaDB object again to resume it
+		By("Create MariaDB: " + mariadb.Name)
+		err = f.CreateMariaDB(mariadb)
 		Expect(err).NotTo(HaveOccurred())
 
 		By("Wait for DormantDatabase to be deleted")
-		f.EventuallyDormantDatabase(mysql.ObjectMeta).Should(BeFalse())
+		f.EventuallyDormantDatabase(mariadb.ObjectMeta).Should(BeFalse())
 
-		By("Wait for Running mysql")
-		f.EventuallyMySQLRunning(mysql.ObjectMeta).Should(BeTrue())
+		By("Wait for Running mariadb")
+		f.EventuallyMariaDBRunning(mariadb.ObjectMeta).Should(BeTrue())
 
 		By("Checking Row Count of Table")
-		f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+		f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 
 	}
 
 	var shouldTakeSnapshot = func() {
-		// Create and wait for running MySQL
+		// Create and wait for running MariaDB
 		createAndWaitForRunning()
 
 		By("Create Secret")
@@ -138,17 +138,17 @@ var _ = Describe("MySQL", func() {
 	}
 
 	var shouldInsertDataAndTakeSnapshot = func() {
-		// Create and wait for running MySQL
+		// Create and wait for running MariaDB
 		createAndWaitForRunning()
 
 		By("Creating Table")
-		f.EventuallyCreateTable(mysql.ObjectMeta, dbName).Should(BeTrue())
+		f.EventuallyCreateTable(mariadb.ObjectMeta, dbName).Should(BeTrue())
 
 		By("Inserting Row")
-		f.EventuallyInsertRow(mysql.ObjectMeta, dbName, 0, 3).Should(BeTrue())
+		f.EventuallyInsertRow(mariadb.ObjectMeta, dbName, 0, 3).Should(BeTrue())
 
 		By("Checking Row Count of Table")
-		f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+		f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 
 		By("Create Secret")
 		err := f.CreateSecret(secret)
@@ -168,49 +168,49 @@ var _ = Describe("MySQL", func() {
 	}
 
 	var deleteTestResource = func() {
-		if mysql == nil {
-			log.Infoln("Skipping cleanup. Reason: mysql is nil")
+		if mariadb == nil {
+			log.Infoln("Skipping cleanup. Reason: mariadb is nil")
 			return
 		}
 
-		By("Check if mysql " + mysql.Name + " exists.")
-		my, err := f.GetMySQL(mysql.ObjectMeta)
+		By("Check if mariadb " + mariadb.Name + " exists.")
+		my, err := f.GetMariaDB(mariadb.ObjectMeta)
 		if err != nil {
 			if kerr.IsNotFound(err) {
-				// MySQL was not created. Hence, rest of cleanup is not necessary.
+				// MariaDB was not created. Hence, rest of cleanup is not necessary.
 				return
 			}
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		By("Delete mysql")
-		err = f.DeleteMySQL(mysql.ObjectMeta)
+		By("Delete mariadb")
+		err = f.DeleteMariaDB(mariadb.ObjectMeta)
 		if err != nil {
 			if kerr.IsNotFound(err) {
-				log.Infoln("Skipping rest of the cleanup. Reason: MySQL does not exist.")
+				log.Infoln("Skipping rest of the cleanup. Reason: MariaDB does not exist.")
 				return
 			}
 			Expect(err).NotTo(HaveOccurred())
 		}
 
 		if my.Spec.TerminationPolicy == api.TerminationPolicyPause {
-			By("Wait for mysql to be paused")
-			f.EventuallyDormantDatabaseStatus(mysql.ObjectMeta).Should(matcher.HavePaused())
+			By("Wait for mariadb to be paused")
+			f.EventuallyDormantDatabaseStatus(mariadb.ObjectMeta).Should(matcher.HavePaused())
 
-			By("WipeOut mysql")
-			_, err := f.PatchDormantDatabase(mysql.ObjectMeta, func(in *api.DormantDatabase) *api.DormantDatabase {
+			By("WipeOut mariadb")
+			_, err := f.PatchDormantDatabase(mariadb.ObjectMeta, func(in *api.DormantDatabase) *api.DormantDatabase {
 				in.Spec.WipeOut = true
 				return in
 			})
 			Expect(err).NotTo(HaveOccurred())
 
 			By("Delete Dormant Database")
-			err = f.DeleteDormantDatabase(mysql.ObjectMeta)
+			err = f.DeleteDormantDatabase(mariadb.ObjectMeta)
 			Expect(err).NotTo(HaveOccurred())
 		}
 
-		By("Wait for mysql resources to be wipedOut")
-		f.EventuallyWipedOut(mysql.ObjectMeta).Should(Succeed())
+		By("Wait for mariadb resources to be wipedOut")
+		f.EventuallyWipedOut(mariadb.ObjectMeta).Should(Succeed())
 	}
 
 	var deleteSnapshot = func() {
@@ -236,17 +236,17 @@ var _ = Describe("MySQL", func() {
 	}
 
 	AfterEach(func() {
-		// delete resources for current MySQL
+		// delete resources for current MariaDB
 		deleteTestResource()
 
-		// old MySQL are in garbageMySQL list. delete their resources.
-		for _, my := range garbageMySQL.Items {
-			*mysql = my
+		// old MariaDB are in garbageMariaDB list. delete their resources.
+		for _, my := range garbageMariaDB.Items {
+			*mariadb = my
 			deleteTestResource()
 		}
 
-		By("Deleting MySQLVersion crd")
-		err := f.DeleteMySQLVersion(mysqlVersion.ObjectMeta)
+		By("Deleting MariaDBVersion crd")
+		err := f.DeleteMariaDBVersion(mariadbVersion.ObjectMeta)
 		if err != nil && !kerr.IsNotFound(err) {
 			Expect(err).NotTo(HaveOccurred())
 		}
@@ -268,7 +268,7 @@ var _ = Describe("MySQL", func() {
 
 			BeforeEach(func() {
 				skipDataChecking = false
-				snapshot.Spec.DatabaseName = mysql.Name
+				snapshot.Spec.DatabaseName = mariadb.Name
 			})
 
 			AfterEach(func() {
@@ -378,7 +378,7 @@ var _ = Describe("MySQL", func() {
 
 				Context("Delete One Snapshot keeping others", func() {
 					BeforeEach(func() {
-						mysql.Spec.Init = &api.InitSpec{
+						mariadb.Spec.Init = &api.InitSpec{
 							ScriptSource: &api.ScriptSourceSpec{
 								VolumeSource: core.VolumeSource{
 									GitRepo: &core.GitRepoVolumeSource{
@@ -391,7 +391,7 @@ var _ = Describe("MySQL", func() {
 					})
 
 					It("Delete One Snapshot keeping others", func() {
-						// Create MySQL and take Snapshot
+						// Create MariaDB and take Snapshot
 						shouldTakeSnapshot()
 
 						oldSnapshot := snapshot.DeepCopy()
@@ -451,7 +451,7 @@ var _ = Describe("MySQL", func() {
 
 				Context("With Init", func() {
 					BeforeEach(func() {
-						mysql.Spec.Init = &api.InitSpec{
+						mariadb.Spec.Init = &api.InitSpec{
 							ScriptSource: &api.ScriptSourceSpec{
 								VolumeSource: core.VolumeSource{
 									GitRepo: &core.GitRepoVolumeSource{
@@ -468,7 +468,7 @@ var _ = Describe("MySQL", func() {
 
 				Context("Delete One Snapshot keeping others", func() {
 					BeforeEach(func() {
-						mysql.Spec.Init = &api.InitSpec{
+						mariadb.Spec.Init = &api.InitSpec{
 							ScriptSource: &api.ScriptSourceSpec{
 								VolumeSource: core.VolumeSource{
 									GitRepo: &core.GitRepoVolumeSource{
@@ -481,7 +481,7 @@ var _ = Describe("MySQL", func() {
 					})
 
 					It("Delete One Snapshot keeping others", func() {
-						// Create MySQL and take Snapshot
+						// Create MariaDB and take Snapshot
 						shouldTakeSnapshot()
 
 						oldSnapshot := snapshot.DeepCopy()
@@ -540,7 +540,7 @@ var _ = Describe("MySQL", func() {
 
 				Context("Delete One Snapshot keeping others", func() {
 					BeforeEach(func() {
-						mysql.Spec.Init = &api.InitSpec{
+						mariadb.Spec.Init = &api.InitSpec{
 							ScriptSource: &api.ScriptSourceSpec{
 								VolumeSource: core.VolumeSource{
 									GitRepo: &core.GitRepoVolumeSource{
@@ -553,7 +553,7 @@ var _ = Describe("MySQL", func() {
 					})
 
 					It("Delete One Snapshot keeping others", func() {
-						// Create MySQL and take Snapshot
+						// Create MariaDB and take Snapshot
 						shouldTakeSnapshot()
 
 						oldSnapshot := snapshot.DeepCopy()
@@ -621,13 +621,13 @@ var _ = Describe("MySQL", func() {
 				})
 
 				var shouldHandleJobVolumeSuccessfully = func() {
-					// Create and wait for running MySQL
+					// Create and wait for running MariaDB
 					createAndWaitForRunning()
 
-					By("Get MySQL")
-					es, err := f.GetMySQL(mysql.ObjectMeta)
+					By("Get MariaDB")
+					es, err := f.GetMariaDB(mariadb.ObjectMeta)
 					Expect(err).NotTo(HaveOccurred())
-					mysql.Spec = es.Spec
+					mariadb.Spec = es.Spec
 
 					By("Create Secret")
 					err = f.CreateSecret(secret)
@@ -637,11 +637,11 @@ var _ = Describe("MySQL", func() {
 					// start
 					pvcSpec := snapshot.Spec.PodVolumeClaimSpec
 					if pvcSpec == nil {
-						pvcSpec = mysql.Spec.Storage
+						pvcSpec = mariadb.Spec.Storage
 					}
 					st := snapshot.Spec.StorageType
 					if st == nil {
-						st = &mysql.Spec.StorageType
+						st = &mariadb.Spec.StorageType
 					}
 					Expect(st).NotTo(BeNil())
 					// end
@@ -692,8 +692,8 @@ var _ = Describe("MySQL", func() {
 				var dbStorageTypeScenarios = func() {
 					Context("DBStorageType - Durable", func() {
 						BeforeEach(func() {
-							mysql.Spec.StorageType = api.StorageTypeDurable
-							mysql.Spec.Storage = &core.PersistentVolumeClaimSpec{
+							mariadb.Spec.StorageType = api.StorageTypeDurable
+							mariadb.Spec.Storage = &core.PersistentVolumeClaimSpec{
 								Resources: core.ResourceRequirements{
 									Requests: core.ResourceList{
 										core.ResourceStorage: resource.MustParse(framework.DBPvcStorageSize),
@@ -709,13 +709,13 @@ var _ = Describe("MySQL", func() {
 
 					Context("DBStorageType - Ephemeral", func() {
 						BeforeEach(func() {
-							mysql.Spec.StorageType = api.StorageTypeEphemeral
-							mysql.Spec.TerminationPolicy = api.TerminationPolicyWipeOut
+							mariadb.Spec.StorageType = api.StorageTypeEphemeral
+							mariadb.Spec.TerminationPolicy = api.TerminationPolicyWipeOut
 						})
 
 						Context("DBPvcSpec is nil", func() {
 							BeforeEach(func() {
-								mysql.Spec.Storage = nil
+								mariadb.Spec.Storage = nil
 							})
 
 							It("should Handle Job Volume Successfully", shouldHandleJobVolumeSuccessfully)
@@ -723,7 +723,7 @@ var _ = Describe("MySQL", func() {
 
 						Context("DBPvcSpec is given [not nil]", func() {
 							BeforeEach(func() {
-								mysql.Spec.Storage = &core.PersistentVolumeClaimSpec{
+								mariadb.Spec.Storage = &core.PersistentVolumeClaimSpec{
 									Resources: core.ResourceRequirements{
 										Requests: core.ResourceList{
 											core.ResourceStorage: resource.MustParse(framework.DBPvcStorageSize),
@@ -799,7 +799,7 @@ var _ = Describe("MySQL", func() {
 
 			Context("With Script", func() {
 				BeforeEach(func() {
-					mysql.Spec.Init = &api.InitSpec{
+					mariadb.Spec.Init = &api.InitSpec{
 						ScriptSource: &api.ScriptSourceSpec{
 							VolumeSource: core.VolumeSource{
 								GitRepo: &core.GitRepoVolumeSource{
@@ -812,11 +812,11 @@ var _ = Describe("MySQL", func() {
 				})
 
 				It("should run successfully", func() {
-					// Create MySQL
+					// Create MariaDB
 					createAndWaitForRunning()
 
 					By("Checking Row Count of Table")
-					f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 				})
 			})
 
@@ -834,35 +834,35 @@ var _ = Describe("MySQL", func() {
 				})
 
 				var shouldInitializeFromSnapshot = func() {
-					// Create MySQL and take Snapshot
+					// Create MariaDB and take Snapshot
 					shouldInsertDataAndTakeSnapshot()
 
-					oldMySQL, err := f.GetMySQL(mysql.ObjectMeta)
+					oldMariaDB, err := f.GetMariaDB(mariadb.ObjectMeta)
 					Expect(err).NotTo(HaveOccurred())
-					garbageMySQL.Items = append(garbageMySQL.Items, *oldMySQL)
+					garbageMariaDB.Items = append(garbageMariaDB.Items, *oldMariaDB)
 
-					By("Create mysql from snapshot")
-					mysql = f.MySQL()
-					mysql.Spec.Init = &api.InitSpec{
+					By("Create mariadb from snapshot")
+					mariadb = f.MariaDB()
+					mariadb.Spec.Init = &api.InitSpec{
 						SnapshotSource: &api.SnapshotSourceSpec{
 							Namespace: snapshot.Namespace,
 							Name:      snapshot.Name,
 						},
 					}
 
-					By("Creating init Snapshot Mysql without secret name" + mysql.Name)
-					err = f.CreateMySQL(mysql)
+					By("Creating init Snapshot MARIADB without secret name" + mariadb.Name)
+					err = f.CreateMariaDB(mariadb)
 					Expect(err).Should(HaveOccurred())
 
 					// for snapshot init, user have to use older secret,
 					// because the username & password  will be replaced to
-					mysql.Spec.DatabaseSecret = oldMySQL.Spec.DatabaseSecret
+					mariadb.Spec.DatabaseSecret = oldMariaDB.Spec.DatabaseSecret
 
-					// Create and wait for running MySQL
+					// Create and wait for running MariaDB
 					createAndWaitForRunning()
 
 					By("Checking Row Count of Table")
-					f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 				}
 
 				Context("From Local backend", func() {
@@ -876,7 +876,7 @@ var _ = Describe("MySQL", func() {
 						Expect(err).NotTo(HaveOccurred())
 
 						secret = f.SecretForLocalBackend()
-						snapshot.Spec.DatabaseName = mysql.Name
+						snapshot.Spec.DatabaseName = mariadb.Name
 						snapshot.Spec.StorageSecretName = secret.Name
 
 						snapshot.Spec.Local = &store.LocalSpec{
@@ -904,7 +904,7 @@ var _ = Describe("MySQL", func() {
 						skipDataChecking = false
 						secret = f.SecretForGCSBackend()
 						snapshot.Spec.StorageSecretName = secret.Name
-						snapshot.Spec.DatabaseName = mysql.Name
+						snapshot.Spec.DatabaseName = mariadb.Name
 
 						snapshot.Spec.GCS = &store.GCSSpec{
 							Bucket: os.Getenv(GCS_BUCKET_NAME),
@@ -920,94 +920,94 @@ var _ = Describe("MySQL", func() {
 
 			Context("Super Fast User - Create-Delete-Create-Delete-Create ", func() {
 				It("should resume DormantDatabase successfully", func() {
-					// Create and wait for running MySQL
+					// Create and wait for running MariaDB
 					createAndWaitForRunning()
 
 					By("Creating Table")
-					f.EventuallyCreateTable(mysql.ObjectMeta, dbName).Should(BeTrue())
+					f.EventuallyCreateTable(mariadb.ObjectMeta, dbName).Should(BeTrue())
 
 					By("Inserting Row")
-					f.EventuallyInsertRow(mysql.ObjectMeta, dbName, 0, 3).Should(BeTrue())
+					f.EventuallyInsertRow(mariadb.ObjectMeta, dbName, 0, 3).Should(BeTrue())
 
 					By("Checking Row Count of Table")
-					f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 
-					By("Delete mysql")
-					err = f.DeleteMySQL(mysql.ObjectMeta)
+					By("Delete mariadb")
+					err = f.DeleteMariaDB(mariadb.ObjectMeta)
 					Expect(err).NotTo(HaveOccurred())
 
-					By("Wait for mysql to be paused")
-					f.EventuallyDormantDatabaseStatus(mysql.ObjectMeta).Should(matcher.HavePaused())
+					By("Wait for mariadb to be paused")
+					f.EventuallyDormantDatabaseStatus(mariadb.ObjectMeta).Should(matcher.HavePaused())
 
-					// Create MySQL object again to resume it
-					By("Create MySQL: " + mysql.Name)
-					err = f.CreateMySQL(mysql)
+					// Create MariaDB object again to resume it
+					By("Create MariaDB: " + mariadb.Name)
+					err = f.CreateMariaDB(mariadb)
 					Expect(err).NotTo(HaveOccurred())
 
 					// Delete without caring if DB is resumed
-					By("Delete mysql")
-					err = f.DeleteMySQL(mysql.ObjectMeta)
+					By("Delete mariadb")
+					err = f.DeleteMariaDB(mariadb.ObjectMeta)
 					Expect(err).NotTo(HaveOccurred())
 
-					By("Wait for MySQL to be deleted")
-					f.EventuallyMySQL(mysql.ObjectMeta).Should(BeFalse())
+					By("Wait for MariaDB to be deleted")
+					f.EventuallyMariaDB(mariadb.ObjectMeta).Should(BeFalse())
 
-					// Create MySQL object again to resume it
-					By("Create MySQL: " + mysql.Name)
-					err = f.CreateMySQL(mysql)
+					// Create MariaDB object again to resume it
+					By("Create MariaDB: " + mariadb.Name)
+					err = f.CreateMariaDB(mariadb)
 					Expect(err).NotTo(HaveOccurred())
 
 					By("Wait for DormantDatabase to be deleted")
-					f.EventuallyDormantDatabase(mysql.ObjectMeta).Should(BeFalse())
+					f.EventuallyDormantDatabase(mariadb.ObjectMeta).Should(BeFalse())
 
-					By("Wait for Running mysql")
-					f.EventuallyMySQLRunning(mysql.ObjectMeta).Should(BeTrue())
+					By("Wait for Running mariadb")
+					f.EventuallyMariaDBRunning(mariadb.ObjectMeta).Should(BeTrue())
 
 					By("Checking Row Count of Table")
-					f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 				})
 			})
 
 			Context("Without Init", func() {
 				It("should resume DormantDatabase successfully", func() {
-					// Create and wait for running MySQL
+					// Create and wait for running MariaDB
 					createAndWaitForRunning()
 
 					By("Creating Table")
-					f.EventuallyCreateTable(mysql.ObjectMeta, dbName).Should(BeTrue())
+					f.EventuallyCreateTable(mariadb.ObjectMeta, dbName).Should(BeTrue())
 
 					By("Inserting Row")
-					f.EventuallyInsertRow(mysql.ObjectMeta, dbName, 0, 3).Should(BeTrue())
+					f.EventuallyInsertRow(mariadb.ObjectMeta, dbName, 0, 3).Should(BeTrue())
 
 					By("Checking Row Count of Table")
-					f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 
-					By("Delete mysql")
-					err = f.DeleteMySQL(mysql.ObjectMeta)
+					By("Delete mariadb")
+					err = f.DeleteMariaDB(mariadb.ObjectMeta)
 					Expect(err).NotTo(HaveOccurred())
 
-					By("Wait for mysql to be paused")
-					f.EventuallyDormantDatabaseStatus(mysql.ObjectMeta).Should(matcher.HavePaused())
+					By("Wait for mariadb to be paused")
+					f.EventuallyDormantDatabaseStatus(mariadb.ObjectMeta).Should(matcher.HavePaused())
 
-					// Create MySQL object again to resume it
-					By("Create MySQL: " + mysql.Name)
-					err = f.CreateMySQL(mysql)
+					// Create MariaDB object again to resume it
+					By("Create MariaDB: " + mariadb.Name)
+					err = f.CreateMariaDB(mariadb)
 					Expect(err).NotTo(HaveOccurred())
 
 					By("Wait for DormantDatabase to be deleted")
-					f.EventuallyDormantDatabase(mysql.ObjectMeta).Should(BeFalse())
+					f.EventuallyDormantDatabase(mariadb.ObjectMeta).Should(BeFalse())
 
-					By("Wait for Running mysql")
-					f.EventuallyMySQLRunning(mysql.ObjectMeta).Should(BeTrue())
+					By("Wait for Running mariadb")
+					f.EventuallyMariaDBRunning(mariadb.ObjectMeta).Should(BeTrue())
 
 					By("Checking Row Count of Table")
-					f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 				})
 			})
 
 			Context("with init Script", func() {
 				BeforeEach(func() {
-					mysql.Spec.Init = &api.InitSpec{
+					mariadb.Spec.Init = &api.InitSpec{
 						ScriptSource: &api.ScriptSourceSpec{
 							VolumeSource: core.VolumeSource{
 								GitRepo: &core.GitRepoVolumeSource{
@@ -1020,39 +1020,39 @@ var _ = Describe("MySQL", func() {
 				})
 
 				It("should resume DormantDatabase successfully", func() {
-					// Create and wait for running MySQL
+					// Create and wait for running MariaDB
 					createAndWaitForRunning()
 
 					By("Checking Row Count of Table")
-					f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 
-					By("Delete mysql")
-					err = f.DeleteMySQL(mysql.ObjectMeta)
+					By("Delete mariadb")
+					err = f.DeleteMariaDB(mariadb.ObjectMeta)
 					Expect(err).NotTo(HaveOccurred())
 
-					By("Wait for mysql to be paused")
-					f.EventuallyDormantDatabaseStatus(mysql.ObjectMeta).Should(matcher.HavePaused())
+					By("Wait for mariadb to be paused")
+					f.EventuallyDormantDatabaseStatus(mariadb.ObjectMeta).Should(matcher.HavePaused())
 
-					// Create MySQL object again to resume it
-					By("Create MySQL: " + mysql.Name)
-					err = f.CreateMySQL(mysql)
+					// Create MariaDB object again to resume it
+					By("Create MariaDB: " + mariadb.Name)
+					err = f.CreateMariaDB(mariadb)
 					Expect(err).NotTo(HaveOccurred())
 
 					By("Wait for DormantDatabase to be deleted")
-					f.EventuallyDormantDatabase(mysql.ObjectMeta).Should(BeFalse())
+					f.EventuallyDormantDatabase(mariadb.ObjectMeta).Should(BeFalse())
 
-					By("Wait for Running mysql")
-					f.EventuallyMySQLRunning(mysql.ObjectMeta).Should(BeTrue())
+					By("Wait for Running mariadb")
+					f.EventuallyMariaDBRunning(mariadb.ObjectMeta).Should(BeTrue())
 
 					By("Checking Row Count of Table")
-					f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 
-					mysql, err := f.GetMySQL(mysql.ObjectMeta)
+					mariadb, err := f.GetMariaDB(mariadb.ObjectMeta)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(mysql.Spec.Init).NotTo(BeNil())
+					Expect(mariadb.Spec.Init).NotTo(BeNil())
 
-					By("Checking MySQL crd does not have kubedb.com/initialized annotation")
-					_, err = meta_util.GetString(mysql.Annotations, api.AnnotationInitialized)
+					By("Checking MariaDB crd does not have kubedb.com/initialized annotation")
+					_, err = meta_util.GetString(mariadb.Annotations, api.AnnotationInitialized)
 					Expect(err).To(HaveOccurred())
 				})
 			})
@@ -1077,68 +1077,68 @@ var _ = Describe("MySQL", func() {
 					snapshot.Spec.GCS = &store.GCSSpec{
 						Bucket: os.Getenv(GCS_BUCKET_NAME),
 					}
-					snapshot.Spec.DatabaseName = mysql.Name
+					snapshot.Spec.DatabaseName = mariadb.Name
 				})
 
 				It("should resume successfully", func() {
-					// Create MySQL and take Snapshot
+					// Create MariaDB and take Snapshot
 					shouldInsertDataAndTakeSnapshot()
 
-					oldMySQL, err := f.GetMySQL(mysql.ObjectMeta)
+					oldMariaDB, err := f.GetMariaDB(mariadb.ObjectMeta)
 					Expect(err).NotTo(HaveOccurred())
 
-					garbageMySQL.Items = append(garbageMySQL.Items, *oldMySQL)
+					garbageMariaDB.Items = append(garbageMariaDB.Items, *oldMariaDB)
 
-					By("Create mysql from snapshot")
-					mysql = f.MySQL()
-					mysql.Spec.Init = &api.InitSpec{
+					By("Create mariadb from snapshot")
+					mariadb = f.MariaDB()
+					mariadb.Spec.Init = &api.InitSpec{
 						SnapshotSource: &api.SnapshotSourceSpec{
 							Namespace: snapshot.Namespace,
 							Name:      snapshot.Name,
 						},
 					}
 
-					By("Creating MySQL without secret name to init from Snapshot: " + mysql.Name)
-					err = f.CreateMySQL(mysql)
+					By("Creating MariaDB without secret name to init from Snapshot: " + mariadb.Name)
+					err = f.CreateMariaDB(mariadb)
 					Expect(err).Should(HaveOccurred())
 
 					// for snapshot init, user have to use older secret,
 					// because the username & password  will be replaced to
-					mysql.Spec.DatabaseSecret = oldMySQL.Spec.DatabaseSecret
+					mariadb.Spec.DatabaseSecret = oldMariaDB.Spec.DatabaseSecret
 
-					// Create and wait for running MySQL
+					// Create and wait for running MariaDB
 					createAndWaitForRunning()
 
 					By("Checking Row Count of Table")
-					f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 
-					By("Delete mysql")
-					err = f.DeleteMySQL(mysql.ObjectMeta)
+					By("Delete mariadb")
+					err = f.DeleteMariaDB(mariadb.ObjectMeta)
 					Expect(err).NotTo(HaveOccurred())
 
-					By("Wait for mysql to be paused")
-					f.EventuallyDormantDatabaseStatus(mysql.ObjectMeta).Should(matcher.HavePaused())
+					By("Wait for mariadb to be paused")
+					f.EventuallyDormantDatabaseStatus(mariadb.ObjectMeta).Should(matcher.HavePaused())
 
-					// Create MySQL object again to resume it
-					By("Create MySQL: " + mysql.Name)
-					err = f.CreateMySQL(mysql)
+					// Create MariaDB object again to resume it
+					By("Create MariaDB: " + mariadb.Name)
+					err = f.CreateMariaDB(mariadb)
 					Expect(err).NotTo(HaveOccurred())
 
 					By("Wait for DormantDatabase to be deleted")
-					f.EventuallyDormantDatabase(mysql.ObjectMeta).Should(BeFalse())
+					f.EventuallyDormantDatabase(mariadb.ObjectMeta).Should(BeFalse())
 
-					By("Wait for Running mysql")
-					f.EventuallyMySQLRunning(mysql.ObjectMeta).Should(BeTrue())
+					By("Wait for Running mariadb")
+					f.EventuallyMariaDBRunning(mariadb.ObjectMeta).Should(BeTrue())
 
 					By("Checking Row Count of Table")
-					f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 
-					mysql, err = f.GetMySQL(mysql.ObjectMeta)
+					mariadb, err = f.GetMariaDB(mariadb.ObjectMeta)
 					Expect(err).NotTo(HaveOccurred())
-					Expect(mysql.Spec.Init).ShouldNot(BeNil())
+					Expect(mariadb.Spec.Init).ShouldNot(BeNil())
 
-					By("Checking MySQL has kubedb.com/initialized annotation")
-					_, err = meta_util.GetString(mysql.Annotations, api.AnnotationInitialized)
+					By("Checking MariaDB has kubedb.com/initialized annotation")
+					_, err = meta_util.GetString(mariadb.Annotations, api.AnnotationInitialized)
 					Expect(err).NotTo(HaveOccurred())
 				})
 			})
@@ -1146,7 +1146,7 @@ var _ = Describe("MySQL", func() {
 			Context("Multiple times with init", func() {
 
 				BeforeEach(func() {
-					mysql.Spec.Init = &api.InitSpec{
+					mariadb.Spec.Init = &api.InitSpec{
 						ScriptSource: &api.ScriptSourceSpec{
 							VolumeSource: core.VolumeSource{
 								GitRepo: &core.GitRepoVolumeSource{
@@ -1159,42 +1159,42 @@ var _ = Describe("MySQL", func() {
 				})
 
 				It("should resume DormantDatabase successfully", func() {
-					// Create and wait for running MySQL
+					// Create and wait for running MariaDB
 					createAndWaitForRunning()
 
 					By("Checking Row Count of Table")
-					f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 
 					for i := 0; i < 3; i++ {
 						By(fmt.Sprintf("%v-th", i+1) + " time running.")
 
-						By("Delete mysql")
-						err = f.DeleteMySQL(mysql.ObjectMeta)
+						By("Delete mariadb")
+						err = f.DeleteMariaDB(mariadb.ObjectMeta)
 						Expect(err).NotTo(HaveOccurred())
 
-						By("Wait for mysql to be paused")
-						f.EventuallyDormantDatabaseStatus(mysql.ObjectMeta).Should(matcher.HavePaused())
+						By("Wait for mariadb to be paused")
+						f.EventuallyDormantDatabaseStatus(mariadb.ObjectMeta).Should(matcher.HavePaused())
 
-						// Create MySQL object again to resume it
-						By("Create MySQL: " + mysql.Name)
-						err = f.CreateMySQL(mysql)
+						// Create MariaDB object again to resume it
+						By("Create MariaDB: " + mariadb.Name)
+						err = f.CreateMariaDB(mariadb)
 						Expect(err).NotTo(HaveOccurred())
 
 						By("Wait for DormantDatabase to be deleted")
-						f.EventuallyDormantDatabase(mysql.ObjectMeta).Should(BeFalse())
+						f.EventuallyDormantDatabase(mariadb.ObjectMeta).Should(BeFalse())
 
-						By("Wait for Running mysql")
-						f.EventuallyMySQLRunning(mysql.ObjectMeta).Should(BeTrue())
+						By("Wait for Running mariadb")
+						f.EventuallyMariaDBRunning(mariadb.ObjectMeta).Should(BeTrue())
 
 						By("Checking Row Count of Table")
-						f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+						f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 
-						mysql, err := f.GetMySQL(mysql.ObjectMeta)
+						mariadb, err := f.GetMariaDB(mariadb.ObjectMeta)
 						Expect(err).NotTo(HaveOccurred())
-						Expect(mysql.Spec.Init).ShouldNot(BeNil())
+						Expect(mariadb.Spec.Init).ShouldNot(BeNil())
 
-						By("Checking MySQL crd does not have kubedb.com/initialized annotation")
-						_, err = meta_util.GetString(mysql.Annotations, api.AnnotationInitialized)
+						By("Checking MariaDB crd does not have kubedb.com/initialized annotation")
+						_, err = meta_util.GetString(mariadb.Annotations, api.AnnotationInitialized)
 						Expect(err).To(HaveOccurred())
 					}
 				})
@@ -1208,7 +1208,7 @@ var _ = Describe("MySQL", func() {
 			})
 
 			AfterEach(func() {
-				snapshotList, err := f.GetSnapshotList(mysql.ObjectMeta)
+				snapshotList, err := f.GetSnapshotList(mariadb.ObjectMeta)
 				Expect(err).NotTo(HaveOccurred())
 
 				for _, snap := range snapshotList.Items {
@@ -1232,28 +1232,28 @@ var _ = Describe("MySQL", func() {
 					err := f.CreateSecret(secret)
 					Expect(err).NotTo(HaveOccurred())
 
-					// Create and wait for running MySQL
+					// Create and wait for running MariaDB
 					createAndWaitForRunning()
 
 					By("Count multiple Snapshot Object")
-					f.EventuallySnapshotCount(mysql.ObjectMeta).Should(matcher.MoreThan(3))
+					f.EventuallySnapshotCount(mariadb.ObjectMeta).Should(matcher.MoreThan(3))
 
-					By("Remove Backup Scheduler from MySQL")
-					_, err = f.PatchMySQL(mysql.ObjectMeta, func(in *api.MySQL) *api.MySQL {
+					By("Remove Backup Scheduler from MariaDB")
+					_, err = f.PatchMariaDB(mariadb.ObjectMeta, func(in *api.MariaDB) *api.MariaDB {
 						in.Spec.BackupSchedule = nil
 						return in
 					})
 					Expect(err).NotTo(HaveOccurred())
 
 					By("Verify multiple Succeeded Snapshot")
-					f.EventuallyMultipleSnapshotFinishedProcessing(mysql.ObjectMeta).Should(Succeed())
+					f.EventuallyMultipleSnapshotFinishedProcessing(mariadb.ObjectMeta).Should(Succeed())
 				}
 
 				Context("with local", func() {
 					BeforeEach(func() {
 						skipDataChecking = true
 						secret = f.SecretForLocalBackend()
-						mysql.Spec.BackupSchedule = &api.BackupScheduleSpec{
+						mariadb.Spec.BackupSchedule = &api.BackupScheduleSpec{
 							CronExpression: "@every 20s",
 							Backend: store.Backend{
 								StorageSecretName: secret.Name,
@@ -1273,7 +1273,7 @@ var _ = Describe("MySQL", func() {
 				Context("with GCS", func() {
 					BeforeEach(func() {
 						secret = f.SecretForGCSBackend()
-						mysql.Spec.BackupSchedule = &api.BackupScheduleSpec{
+						mariadb.Spec.BackupSchedule = &api.BackupScheduleSpec{
 							CronExpression: "@every 1m",
 							Backend: store.Backend{
 								StorageSecretName: secret.Name,
@@ -1296,15 +1296,15 @@ var _ = Describe("MySQL", func() {
 				})
 
 				It("should run scheduler successfully", func() {
-					// Create and wait for running MySQL
+					// Create and wait for running MariaDB
 					createAndWaitForRunning()
 
 					By("Create Secret")
 					err := f.CreateSecret(secret)
 					Expect(err).NotTo(HaveOccurred())
 
-					By("Update mysql")
-					_, err = f.PatchMySQL(mysql.ObjectMeta, func(in *api.MySQL) *api.MySQL {
+					By("Update mariadb")
+					_, err = f.PatchMariaDB(mariadb.ObjectMeta, func(in *api.MariaDB) *api.MariaDB {
 						in.Spec.BackupSchedule = &api.BackupScheduleSpec{
 							CronExpression: "@every 20s",
 							Backend: store.Backend{
@@ -1322,17 +1322,17 @@ var _ = Describe("MySQL", func() {
 					Expect(err).NotTo(HaveOccurred())
 
 					By("Count multiple Snapshot Object")
-					f.EventuallySnapshotCount(mysql.ObjectMeta).Should(matcher.MoreThan(3))
+					f.EventuallySnapshotCount(mariadb.ObjectMeta).Should(matcher.MoreThan(3))
 
-					By("Remove Backup Scheduler from MySQL")
-					_, err = f.PatchMySQL(mysql.ObjectMeta, func(in *api.MySQL) *api.MySQL {
+					By("Remove Backup Scheduler from MariaDB")
+					_, err = f.PatchMariaDB(mariadb.ObjectMeta, func(in *api.MariaDB) *api.MariaDB {
 						in.Spec.BackupSchedule = nil
 						return in
 					})
 					Expect(err).NotTo(HaveOccurred())
 
 					By("Verify multiple Succeeded Snapshot")
-					f.EventuallyMultipleSnapshotFinishedProcessing(mysql.ObjectMeta).Should(Succeed())
+					f.EventuallyMultipleSnapshotFinishedProcessing(mariadb.ObjectMeta).Should(Succeed())
 				})
 			})
 
@@ -1344,15 +1344,15 @@ var _ = Describe("MySQL", func() {
 				})
 
 				It("should re-use scheduler successfully", func() {
-					// Create and wait for running MySQL
+					// Create and wait for running MariaDB
 					createAndWaitForRunning()
 
 					By("Create Secret")
 					err := f.CreateSecret(secret)
 					Expect(err).NotTo(HaveOccurred())
 
-					By("Update mysql")
-					_, err = f.PatchMySQL(mysql.ObjectMeta, func(in *api.MySQL) *api.MySQL {
+					By("Update mariadb")
+					_, err = f.PatchMariaDB(mariadb.ObjectMeta, func(in *api.MariaDB) *api.MariaDB {
 						in.Spec.BackupSchedule = &api.BackupScheduleSpec{
 							CronExpression: "@every 20s",
 							Backend: store.Backend{
@@ -1370,53 +1370,53 @@ var _ = Describe("MySQL", func() {
 					Expect(err).NotTo(HaveOccurred())
 
 					By("Creating Table")
-					f.EventuallyCreateTable(mysql.ObjectMeta, dbName).Should(BeTrue())
+					f.EventuallyCreateTable(mariadb.ObjectMeta, dbName).Should(BeTrue())
 
 					By("Inserting Row")
-					f.EventuallyInsertRow(mysql.ObjectMeta, dbName, 0, 3).Should(BeTrue())
+					f.EventuallyInsertRow(mariadb.ObjectMeta, dbName, 0, 3).Should(BeTrue())
 
 					By("Checking Row Count of Table")
-					f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 
 					By("Count multiple Snapshot Object")
-					f.EventuallySnapshotCount(mysql.ObjectMeta).Should(matcher.MoreThan(3))
+					f.EventuallySnapshotCount(mariadb.ObjectMeta).Should(matcher.MoreThan(3))
 
 					By("Verify multiple Succeeded Snapshot")
-					f.EventuallyMultipleSnapshotFinishedProcessing(mysql.ObjectMeta).Should(Succeed())
+					f.EventuallyMultipleSnapshotFinishedProcessing(mariadb.ObjectMeta).Should(Succeed())
 
-					By("Delete mysql")
-					err = f.DeleteMySQL(mysql.ObjectMeta)
+					By("Delete mariadb")
+					err = f.DeleteMariaDB(mariadb.ObjectMeta)
 					Expect(err).NotTo(HaveOccurred())
 
-					By("Wait for mysql to be paused")
-					f.EventuallyDormantDatabaseStatus(mysql.ObjectMeta).Should(matcher.HavePaused())
+					By("Wait for mariadb to be paused")
+					f.EventuallyDormantDatabaseStatus(mariadb.ObjectMeta).Should(matcher.HavePaused())
 
-					// Create MySQL object again to resume it
-					By("Create MySQL: " + mysql.Name)
-					err = f.CreateMySQL(mysql)
+					// Create MariaDB object again to resume it
+					By("Create MariaDB: " + mariadb.Name)
+					err = f.CreateMariaDB(mariadb)
 					Expect(err).NotTo(HaveOccurred())
 
 					By("Wait for DormantDatabase to be deleted")
-					f.EventuallyDormantDatabase(mysql.ObjectMeta).Should(BeFalse())
+					f.EventuallyDormantDatabase(mariadb.ObjectMeta).Should(BeFalse())
 
-					By("Wait for Running mysql")
-					f.EventuallyMySQLRunning(mysql.ObjectMeta).Should(BeTrue())
+					By("Wait for Running mariadb")
+					f.EventuallyMariaDBRunning(mariadb.ObjectMeta).Should(BeTrue())
 
 					By("Checking Row Count of Table")
-					f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 
 					By("Count multiple Snapshot Object")
-					f.EventuallySnapshotCount(mysql.ObjectMeta).Should(matcher.MoreThan(5))
+					f.EventuallySnapshotCount(mariadb.ObjectMeta).Should(matcher.MoreThan(5))
 
-					By("Remove Backup Scheduler from MySQL")
-					_, err = f.PatchMySQL(mysql.ObjectMeta, func(in *api.MySQL) *api.MySQL {
+					By("Remove Backup Scheduler from MariaDB")
+					_, err = f.PatchMariaDB(mariadb.ObjectMeta, func(in *api.MariaDB) *api.MariaDB {
 						in.Spec.BackupSchedule = nil
 						return in
 					})
 					Expect(err).NotTo(HaveOccurred())
 
 					By("Verify multiple Succeeded Snapshot")
-					f.EventuallyMultipleSnapshotFinishedProcessing(mysql.ObjectMeta).Should(Succeed())
+					f.EventuallyMultipleSnapshotFinishedProcessing(mariadb.ObjectMeta).Should(Succeed())
 				})
 			})
 		})
@@ -1430,31 +1430,31 @@ var _ = Describe("MySQL", func() {
 				snapshot.Spec.GCS = &store.GCSSpec{
 					Bucket: os.Getenv(GCS_BUCKET_NAME),
 				}
-				snapshot.Spec.DatabaseName = mysql.Name
+				snapshot.Spec.DatabaseName = mariadb.Name
 			})
 
 			Context("with TerminationDoNotTerminate", func() {
 				BeforeEach(func() {
 					skipDataChecking = true
-					mysql.Spec.TerminationPolicy = api.TerminationPolicyDoNotTerminate
+					mariadb.Spec.TerminationPolicy = api.TerminationPolicyDoNotTerminate
 				})
 
 				It("should work successfully", func() {
-					// Create and wait for running MySQL
+					// Create and wait for running MariaDB
 					createAndWaitForRunning()
 
-					By("Delete mysql")
-					err = f.DeleteMySQL(mysql.ObjectMeta)
+					By("Delete mariadb")
+					err = f.DeleteMariaDB(mariadb.ObjectMeta)
 					Expect(err).Should(HaveOccurred())
 
-					By("MySQL is not paused. Check for mysql")
-					f.EventuallyMySQL(mysql.ObjectMeta).Should(BeTrue())
+					By("MariaDB is not paused. Check for mariadb")
+					f.EventuallyMariaDB(mariadb.ObjectMeta).Should(BeTrue())
 
-					By("Check for Running mysql")
-					f.EventuallyMySQLRunning(mysql.ObjectMeta).Should(BeTrue())
+					By("Check for Running mariadb")
+					f.EventuallyMariaDBRunning(mariadb.ObjectMeta).Should(BeTrue())
 
-					By("Update mysql to set spec.terminationPolicy = Pause")
-					_, err := f.PatchMySQL(mysql.ObjectMeta, func(in *api.MySQL) *api.MySQL {
+					By("Update mariadb to set spec.terminationPolicy = Pause")
+					_, err := f.PatchMariaDB(mariadb.ObjectMeta, func(in *api.MariaDB) *api.MariaDB {
 						in.Spec.TerminationPolicy = api.TerminationPolicyPause
 						return in
 					})
@@ -1476,22 +1476,22 @@ var _ = Describe("MySQL", func() {
 				})
 
 				It("should create DormantDatabase and resume from it", func() {
-					// Run MySQL and take snapshot
+					// Run MariaDB and take snapshot
 					shouldInsertDataAndTakeSnapshot()
 
-					By("Deleting MySQL crd")
-					err = f.DeleteMySQL(mysql.ObjectMeta)
+					By("Deleting MariaDB crd")
+					err = f.DeleteMariaDB(mariadb.ObjectMeta)
 					Expect(err).NotTo(HaveOccurred())
 
-					// DormantDatabase.Status= paused, means mysql object is deleted
-					By("Waiting for mysql to be paused")
-					f.EventuallyDormantDatabaseStatus(mysql.ObjectMeta).Should(matcher.HavePaused())
+					// DormantDatabase.Status= paused, means mariadb object is deleted
+					By("Waiting for mariadb to be paused")
+					f.EventuallyDormantDatabaseStatus(mariadb.ObjectMeta).Should(matcher.HavePaused())
 
 					By("Checking PVC hasn't been deleted")
-					f.EventuallyPVCCount(mysql.ObjectMeta).Should(Equal(1))
+					f.EventuallyPVCCount(mariadb.ObjectMeta).Should(Equal(1))
 
 					By("Checking Secret hasn't been deleted")
-					f.EventuallyDBSecretCount(mysql.ObjectMeta).Should(Equal(1))
+					f.EventuallyDBSecretCount(mariadb.ObjectMeta).Should(Equal(1))
 
 					By("Checking snapshot hasn't been deleted")
 					f.EventuallySnapshot(snapshot.ObjectMeta).Should(BeTrue())
@@ -1501,26 +1501,26 @@ var _ = Describe("MySQL", func() {
 						f.EventuallySnapshotDataFound(snapshot).Should(BeTrue())
 					}
 
-					// Create MySQL object again to resume it
-					By("Create (resume) MySQL: " + mysql.Name)
-					err = f.CreateMySQL(mysql)
+					// Create MariaDB object again to resume it
+					By("Create (resume) MariaDB: " + mariadb.Name)
+					err = f.CreateMariaDB(mariadb)
 					Expect(err).NotTo(HaveOccurred())
 
 					By("Wait for DormantDatabase to be deleted")
-					f.EventuallyDormantDatabase(mysql.ObjectMeta).Should(BeFalse())
+					f.EventuallyDormantDatabase(mariadb.ObjectMeta).Should(BeFalse())
 
-					By("Wait for Running mysql")
-					f.EventuallyMySQLRunning(mysql.ObjectMeta).Should(BeTrue())
+					By("Wait for Running mariadb")
+					f.EventuallyMariaDBRunning(mariadb.ObjectMeta).Should(BeTrue())
 
 					By("Checking row count of table")
-					f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 				})
 			})
 
 			Context("with TerminationPolicyDelete", func() {
 
 				BeforeEach(func() {
-					mysql.Spec.TerminationPolicy = api.TerminationPolicyDelete
+					mariadb.Spec.TerminationPolicy = api.TerminationPolicyDelete
 				})
 
 				AfterEach(func() {
@@ -1535,24 +1535,24 @@ var _ = Describe("MySQL", func() {
 				})
 
 				It("should not create DormantDatabase and should not delete secret and snapshot", func() {
-					// Run MySQL and take snapshot
+					// Run MariaDB and take snapshot
 					shouldInsertDataAndTakeSnapshot()
 
-					By("Delete mysql")
-					err = f.DeleteMySQL(mysql.ObjectMeta)
+					By("Delete mariadb")
+					err = f.DeleteMariaDB(mariadb.ObjectMeta)
 					Expect(err).NotTo(HaveOccurred())
 
-					By("wait until mysql is deleted")
-					f.EventuallyMySQL(mysql.ObjectMeta).Should(BeFalse())
+					By("wait until mariadb is deleted")
+					f.EventuallyMariaDB(mariadb.ObjectMeta).Should(BeFalse())
 
 					By("Checking DormantDatabase is not created")
-					f.EventuallyDormantDatabase(mysql.ObjectMeta).Should(BeFalse())
+					f.EventuallyDormantDatabase(mariadb.ObjectMeta).Should(BeFalse())
 
 					By("Checking PVC has been deleted")
-					f.EventuallyPVCCount(mysql.ObjectMeta).Should(Equal(0))
+					f.EventuallyPVCCount(mariadb.ObjectMeta).Should(Equal(0))
 
 					By("Checking Secret hasn't been deleted")
-					f.EventuallyDBSecretCount(mysql.ObjectMeta).Should(Equal(1))
+					f.EventuallyDBSecretCount(mariadb.ObjectMeta).Should(Equal(1))
 
 					By("Checking Snapshot hasn't been deleted")
 					f.EventuallySnapshot(snapshot.ObjectMeta).Should(BeTrue())
@@ -1567,31 +1567,31 @@ var _ = Describe("MySQL", func() {
 			Context("with TerminationPolicyWipeOut", func() {
 
 				BeforeEach(func() {
-					mysql.Spec.TerminationPolicy = api.TerminationPolicyWipeOut
+					mariadb.Spec.TerminationPolicy = api.TerminationPolicyWipeOut
 				})
 
 				It("should not create DormantDatabase and should wipeOut all", func() {
-					// Run MySQL and take snapshot
+					// Run MariaDB and take snapshot
 					shouldInsertDataAndTakeSnapshot()
 
-					By("Delete mysql")
-					err = f.DeleteMySQL(mysql.ObjectMeta)
+					By("Delete mariadb")
+					err = f.DeleteMariaDB(mariadb.ObjectMeta)
 					Expect(err).NotTo(HaveOccurred())
 
-					By("wait until mysql is deleted")
-					f.EventuallyMySQL(mysql.ObjectMeta).Should(BeFalse())
+					By("wait until mariadb is deleted")
+					f.EventuallyMariaDB(mariadb.ObjectMeta).Should(BeFalse())
 
 					By("Checking DormantDatabase is not created")
-					f.EventuallyDormantDatabase(mysql.ObjectMeta).Should(BeFalse())
+					f.EventuallyDormantDatabase(mariadb.ObjectMeta).Should(BeFalse())
 
 					By("Checking PVCs has been deleted")
-					f.EventuallyPVCCount(mysql.ObjectMeta).Should(Equal(0))
+					f.EventuallyPVCCount(mariadb.ObjectMeta).Should(Equal(0))
 
 					By("Checking Snapshots has been deleted")
 					f.EventuallySnapshot(snapshot.ObjectMeta).Should(BeFalse())
 
 					By("Checking Secrets has been deleted")
-					f.EventuallyDBSecretCount(mysql.ObjectMeta).Should(Equal(0))
+					f.EventuallyDBSecretCount(mariadb.ObjectMeta).Should(Equal(0))
 				})
 			})
 		})
@@ -1606,9 +1606,9 @@ var _ = Describe("MySQL", func() {
 					}
 
 					dbName = f.App()
-					mysql.Spec.PodTemplate.Spec.Env = []core.EnvVar{
+					mariadb.Spec.PodTemplate.Spec.Env = []core.EnvVar{
 						{
-							Name:  MYSQL_DATABASE,
+							Name:  MARIADB_DATABASE,
 							Value: dbName,
 						},
 					}
@@ -1619,19 +1619,19 @@ var _ = Describe("MySQL", func() {
 
 			Context("Root Password as EnvVar", func() {
 
-				It("should reject to create MySQL CRD", func() {
+				It("should reject to create MariaDB CRD", func() {
 					if skipMessage != "" {
 						Skip(skipMessage)
 					}
 
-					mysql.Spec.PodTemplate.Spec.Env = []core.EnvVar{
+					mariadb.Spec.PodTemplate.Spec.Env = []core.EnvVar{
 						{
-							Name:  MYSQL_ROOT_PASSWORD,
+							Name:  MARIADB_ROOT_PASSWORD,
 							Value: "not@secret",
 						},
 					}
-					By("Create MySQL: " + mysql.Name)
-					err = f.CreateMySQL(mysql)
+					By("Create MariaDB: " + mariadb.Name)
+					err = f.CreateMariaDB(mariadb)
 					Expect(err).To(HaveOccurred())
 				})
 			})
@@ -1644,9 +1644,9 @@ var _ = Describe("MySQL", func() {
 					}
 
 					dbName = f.App()
-					mysql.Spec.PodTemplate.Spec.Env = []core.EnvVar{
+					mariadb.Spec.PodTemplate.Spec.Env = []core.EnvVar{
 						{
-							Name:  MYSQL_DATABASE,
+							Name:  MARIADB_DATABASE,
 							Value: dbName,
 						},
 					}
@@ -1654,10 +1654,10 @@ var _ = Describe("MySQL", func() {
 					testGeneralBehaviour()
 
 					By("Patching EnvVar")
-					_, _, err = util.PatchMySQL(f.ExtClient().KubedbV1alpha1(), mysql, func(in *api.MySQL) *api.MySQL {
+					_, _, err = util.PatchMariaDB(f.ExtClient().KubedbV1alpha1(), mariadb, func(in *api.MariaDB) *api.MariaDB {
 						in.Spec.PodTemplate.Spec.Env = []core.EnvVar{
 							{
-								Name:  MYSQL_DATABASE,
+								Name:  MARIADB_DATABASE,
 								Value: "patched-db",
 							},
 						}
@@ -1698,7 +1698,7 @@ var _ = Describe("MySQL", func() {
 					err := f.CreateConfigMap(userConfig)
 					Expect(err).NotTo(HaveOccurred())
 
-					mysql.Spec.ConfigSource = &core.VolumeSource{
+					mariadb.Spec.ConfigSource = &core.VolumeSource{
 						ConfigMap: &core.ConfigMapVolumeSource{
 							LocalObjectReference: core.LocalObjectReference{
 								Name: userConfig.Name,
@@ -1706,12 +1706,12 @@ var _ = Describe("MySQL", func() {
 						},
 					}
 
-					// Create MySQL
+					// Create MariaDB
 					createAndWaitForRunning()
 
-					By("Checking mysql configured from provided custom configuration")
+					By("Checking mariadb configured from provided custom configuration")
 					for _, cfg := range customConfigs {
-						f.EventuallyMySQLVariable(mysql.ObjectMeta, dbName, cfg).Should(matcher.UseCustomConfig(cfg))
+						f.EventuallyMariaDBVariable(mariadb.ObjectMeta, dbName, cfg).Should(matcher.UseCustomConfig(cfg))
 					}
 				})
 			})
@@ -1725,17 +1725,17 @@ var _ = Describe("MySQL", func() {
 					Skip(skipMessage)
 				}
 
-				// Create MySQL
+				// Create MariaDB
 				createAndWaitForRunning()
 
 				By("Creating Table")
-				f.EventuallyCreateTable(mysql.ObjectMeta, dbName).Should(BeTrue())
+				f.EventuallyCreateTable(mariadb.ObjectMeta, dbName).Should(BeTrue())
 
 				By("Inserting Rows")
-				f.EventuallyInsertRow(mysql.ObjectMeta, dbName, 0, 3).Should(BeTrue())
+				f.EventuallyInsertRow(mariadb.ObjectMeta, dbName, 0, 3).Should(BeTrue())
 
 				By("Checking Row Count of Table")
-				f.EventuallyCountRow(mysql.ObjectMeta, dbName, 0).Should(Equal(3))
+				f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
 			}
 
 			Context("Ephemeral", func() {
@@ -1743,9 +1743,9 @@ var _ = Describe("MySQL", func() {
 				Context("General Behaviour", func() {
 
 					BeforeEach(func() {
-						mysql.Spec.StorageType = api.StorageTypeEphemeral
-						mysql.Spec.Storage = nil
-						mysql.Spec.TerminationPolicy = api.TerminationPolicyWipeOut
+						mariadb.Spec.StorageType = api.StorageTypeEphemeral
+						mariadb.Spec.Storage = nil
+						mariadb.Spec.TerminationPolicy = api.TerminationPolicyWipeOut
 					})
 
 					It("should run successfully", shouldRunSuccessfully)
@@ -1754,15 +1754,15 @@ var _ = Describe("MySQL", func() {
 				Context("With TerminationPolicyPause", func() {
 
 					BeforeEach(func() {
-						mysql.Spec.StorageType = api.StorageTypeEphemeral
-						mysql.Spec.Storage = nil
-						mysql.Spec.TerminationPolicy = api.TerminationPolicyPause
+						mariadb.Spec.StorageType = api.StorageTypeEphemeral
+						mariadb.Spec.Storage = nil
+						mariadb.Spec.TerminationPolicy = api.TerminationPolicyPause
 					})
 
-					It("should reject to create MySQL object", func() {
+					It("should reject to create MariaDB object", func() {
 
-						By("Creating MySQL: " + mysql.Name)
-						err := f.CreateMySQL(mysql)
+						By("Creating MariaDB: " + mariadb.Name)
+						err := f.CreateMariaDB(mariadb)
 						Expect(err).To(HaveOccurred())
 					})
 				})
