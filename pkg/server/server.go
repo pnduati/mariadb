@@ -211,7 +211,7 @@ func (c completedConfig) New() (*MariaDBServer, error) {
 						if e2 == nil {
 							eventer.CreateEventWithLog(
 								kubernetes.NewForConfigOrDie(c.OperatorConfig.ClientConfig),
-								"maria-operator",
+								"mariadb-operator",
 								w,
 								core.EventTypeWarning,
 								eventer.EventReasonAdmissionWebhookNotActivated,

@@ -66,7 +66,7 @@ func (c *Controller) ensureRole(db *api.MariaDB, name string, pspName string) er
 	return err
 }
 
-func (c *Controller) createRoleBinding(db *api.MariaDB, name string) error {
+func (c *Controller) createRoleBinding(db *api.MariaDB, roleName string, saName string) error {
 	ref, rerr := reference.GetReference(clientsetscheme.Scheme, db)
 	if rerr != nil {
 		return rerr
@@ -75,7 +75,7 @@ func (c *Controller) createRoleBinding(db *api.MariaDB, name string) error {
 	_, _, err := rbac_util.CreateOrPatchRoleBinding(
 		c.Client,
 		metav1.ObjectMeta{
-			Name:      name,
+			Name:      roleName,
 			Namespace: db.Namespace,
 		},
 		func(in *rbac.RoleBinding) *rbac.RoleBinding {
@@ -84,12 +84,12 @@ func (c *Controller) createRoleBinding(db *api.MariaDB, name string) error {
 			in.RoleRef = rbac.RoleRef{
 				APIGroup: rbac.GroupName,
 				Kind:     "Role",
-				Name:     name,
+				Name:     roleName,
 			}
 			in.Subjects = []rbac.Subject{
 				{
 					Kind:      rbac.ServiceAccountKind,
-					Name:      name,
+					Name:      saName,
 					Namespace: db.Namespace,
 				},
 			}
@@ -110,26 +110,48 @@ func (c *Controller) getPolicyNames(db *api.MariaDB) (string, string, error) {
 	return dbPolicyName, snapshotPolicyName, nil
 }
 
-func (c *Controller) ensureRBACStuff(mariadb *api.MariaDB) error {
-	dbPolicyName, snapshotPolicyName, err := c.getPolicyNames(mariadb)
-	if err != nil {
-		return err
+func (c *Controller) ensureDatabaseRBAC(mariadb *api.MariaDB) error {
+	saName := mariadb.Spec.PodTemplate.Spec.ServiceAccountName
+	if saName == "" {
+		saName = mariadb.OffshootName()
+		mariadb.Spec.PodTemplate.Spec.ServiceAccountName = saName
 	}
 
-	// Create New ServiceAccount
-	if err := c.createServiceAccount(mariadb, mariadb.OffshootName()); err != nil {
-		if !kerr.IsAlreadyExists(err) {
-			return err
+	sa, err := c.Client.CoreV1().ServiceAccounts(mariadb.Namespace).Get(saName, metav1.GetOptions{})
+	if kerr.IsNotFound(err) {
+		// create service account, since it does not exist
+		if err = c.createServiceAccount(mariadb, saName); err != nil {
+			if !kerr.IsAlreadyExists(err) {
+				return err
+			}
 		}
+	} else if err != nil {
+		return err
+	} else if !core_util.IsOwnedBy(sa, mariadb) {
+		// user provided the service account, so do nothing.
+		return nil
 	}
 
 	// Create New Role
-	if err := c.ensureRole(mariadb, mariadb.OffshootName(), dbPolicyName); err != nil {
+	pspName, _, err := c.getPolicyNames(mariadb)
+	if err != nil {
+		return err
+	}
+	if err := c.ensureRole(mariadb, mariadb.OffshootName(), pspName); err != nil {
 		return err
 	}
 
 	// Create New RoleBinding
-	if err := c.createRoleBinding(mariadb, mariadb.OffshootName()); err != nil {
+	if err := c.createRoleBinding(mariadb, mariadb.OffshootName(), saName); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Controller) ensureSnapshotRBAC(mariadb *api.MariaDB) error {
+	_, snapshotPolicyName, err := c.getPolicyNames(mariadb)
+	if err != nil {
 		return err
 	}
 
@@ -146,7 +168,7 @@ func (c *Controller) ensureRBACStuff(mariadb *api.MariaDB) error {
 	}
 
 	// Create New RoleBinding for Snapshot
-	if err := c.createRoleBinding(mariadb, mariadb.SnapshotSAName()); err != nil {
+	if err := c.createRoleBinding(mariadb, mariadb.SnapshotSAName(), mariadb.SnapshotSAName()); err != nil {
 		return err
 	}
 

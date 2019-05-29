@@ -10,8 +10,8 @@ pushd $REPO_ROOT
 
 rm -rf dist
 
-./hack/docker/maria-operator/make.sh
-./hack/docker/maria-operator/make.sh release
+./hack/docker/mariadb-operator/make.sh
+./hack/docker/mariadb-operator/make.sh release
 
 rm dist/.tag
 

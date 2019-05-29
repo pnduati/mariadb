@@ -179,6 +179,9 @@ func setDefaultsFromDormantDB(extClient cs.Interface, mariadb *api.MariaDB) erro
 	// Skip checking UpdateStrategy
 	ddbOriginSpec.UpdateStrategy = mariadb.Spec.UpdateStrategy
 
+	// Skip checking ServiceAccountName
+	ddbOriginSpec.PodTemplate.Spec.ServiceAccountName = mariadb.Spec.PodTemplate.Spec.ServiceAccountName
+
 	// Skip checking TerminationPolicy
 	ddbOriginSpec.TerminationPolicy = mariadb.Spec.TerminationPolicy
 

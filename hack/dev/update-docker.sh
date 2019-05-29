@@ -102,6 +102,6 @@ fi
 
 if [ "$OPERATOR_UPDATE" -eq 1 ]; then
   cowsay -f tux "Processing Operator images" || true
-  ${REPO_ROOT}/hack/docker/maria-operator/make.sh build
-  ${REPO_ROOT}/hack/docker/maria-operator/make.sh push
+  ${REPO_ROOT}/hack/docker/mariadb-operator/make.sh build
+  ${REPO_ROOT}/hack/docker/mariadb-operator/make.sh push
 fi

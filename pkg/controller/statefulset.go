@@ -46,6 +46,12 @@ func (c *Controller) ensureStatefulSet(mariadb *api.MariaDB) (kutil.VerbType, er
 			vt,
 		)
 	}
+
+	// ensure pdb
+	if err := c.CreateStatefulSetPodDisruptionBudget(statefulSet); err != nil {
+		return kutil.VerbUnchanged, err
+	}
+
 	return vt, nil
 }
 
@@ -205,7 +211,7 @@ func (c *Controller) createStatefulSet(mariadb *api.MariaDB) (*apps.StatefulSet,
 		in.Spec.Template.Spec.SecurityContext = mariadb.Spec.PodTemplate.Spec.SecurityContext
 
 		if c.EnableRBAC {
-			in.Spec.Template.Spec.ServiceAccountName = mariadb.OffshootName()
+			in.Spec.Template.Spec.ServiceAccountName = mariadb.Spec.PodTemplate.Spec.ServiceAccountName
 		}
 
 		in.Spec.UpdateStrategy = mariadb.Spec.UpdateStrategy
@@ -213,6 +219,7 @@ func (c *Controller) createStatefulSet(mariadb *api.MariaDB) (*apps.StatefulSet,
 
 		return in
 	})
+
 }
 
 func upsertDataVolume(statefulSet *apps.StatefulSet, mariadb *api.MariaDB) *apps.StatefulSet {

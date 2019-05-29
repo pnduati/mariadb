@@ -15,7 +15,10 @@ import (
 	kerr "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	v1 "kmodules.xyz/client-go/core/v1"
+	meta_util "kmodules.xyz/client-go/meta"
 	store "kmodules.xyz/objectstore-api/api/v1"
+	"stash.appscode.dev/stash/pkg/restic"
 )
 
 func (fi *Invocation) SecretForLocalBackend() *core.Secret {
@@ -113,6 +116,18 @@ func (fi *Invocation) SecretForSwiftBackend() *core.Secret {
 	}
 }
 
+func (i *Invocation) PatchSecretForRestic(secret *core.Secret) *core.Secret {
+	if secret == nil {
+		return secret
+	}
+
+	secret.StringData = v1.UpsertMap(secret.StringData, map[string]string{
+		restic.RESTIC_PASSWORD: "RESTIC_PASSWORD",
+	})
+
+	return secret
+}
+
 // TODO: Add more methods for Swift, Backblaze B2, Rest server backend.
 
 func (f *Framework) CreateSecret(obj *core.Secret) error {
@@ -175,4 +190,36 @@ func (f *Framework) EventuallyDBSecretCount(meta metav1.ObjectMeta) GomegaAsyncA
 		time.Minute*5,
 		time.Second*5,
 	)
+}
+
+func (f *Framework) CheckSecret(secret *core.Secret) error {
+	_, err := f.kubeClient.CoreV1().Secrets(f.namespace).Get(secret.Name, metav1.GetOptions{})
+	return err
+}
+
+func (i *Invocation) SecretForDatabaseAuthentication(meta metav1.ObjectMeta, mangedByKubeDB bool) *core.Secret {
+	//mangedByKubeDB mimics a secret created and manged by kubedb and not user.
+	// It should get deleted during wipeout
+	randPassword := ""
+
+	// if the password starts with "-" it will cause error in bash scripts (in mongodb-tools)
+	for randPassword = rand.GeneratePassword(); randPassword[0] == '-'; {
+	}
+	var dbObjectMeta = metav1.ObjectMeta{
+		Name:      fmt.Sprintf("kubedb-%v-%v", meta.Name, CustomSecretSuffix),
+		Namespace: meta.Namespace,
+	}
+	if mangedByKubeDB {
+		dbObjectMeta.Labels = map[string]string{
+			meta_util.ManagedByLabelKey: api.GenericKey,
+		}
+	}
+	return &core.Secret{
+		ObjectMeta: dbObjectMeta,
+		Type:       core.SecretTypeOpaque,
+		StringData: map[string]string{
+			KeyMariaDBUser:     mariadbUser,
+			KeyMariaDBPassword: randPassword,
+		},
+	}
 }

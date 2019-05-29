@@ -10,7 +10,7 @@ export SELF_HOSTED=1
 export ARGS="" # Forward arguments to installer script
 
 REPO_ROOT="$GOPATH/src/github.com/kubedb/mariadb"
-CLI_ROOT="$GOPATH/src/github.com/kubedb/cli"
+INSTALLER_ROOT="$GOPATH/src/github.com/kubedb/installer"
 
 pushd $REPO_ROOT
 
@@ -115,25 +115,25 @@ while test $# -gt 0; do
 done
 
 # If APPSCODE_ENV==dev , use cli repo locally to run the installer script.
-# Update "CLI_BRANCH" in deploy/settings file to pull a particular CLI repo branch.
+# Update "INSTALLER_BRANCH" in deploy/settings file to pull a particular CLI repo branch.
 if [ "$APPSCODE_ENV" = "dev" ]; then
   detect_tag ''
-  export KUBEDB_SCRIPT="cat $CLI_ROOT/"
+  export KUBEDB_SCRIPT="cat $INSTALLER_ROOT/"
   export CUSTOM_OPERATOR_TAG=$TAG
   echo ""
 
-  if [[ ! -d $CLI_ROOT ]]; then
+  if [[ ! -d $INSTALLER_ROOT ]]; then
     echo ">>> Cloning cli repo"
-    git clone -b $CLI_BRANCH https://github.com/kubedb/cli.git "${CLI_ROOT}"
-    pushd $CLI_ROOT
+    git clone -b $INSTALLER_BRANCH https://github.com/kubedb/installer.git "${INSTALLER_ROOT}"
+    pushd $INSTALLER_ROOT
   else
-    pushd $CLI_ROOT
+    pushd $INSTALLER_ROOT
     detect_tag ''
-    if [[ $git_branch != $CLI_BRANCH ]]; then
+    if [[ $git_branch != $INSTALLER_BRANCH ]]; then
       git fetch --all
-      git checkout $CLI_BRANCH
+      git checkout $INSTALLER_BRANCH
     fi
-    git pull --ff-only origin $CLI_BRANCH #Pull update from remote only if there will be no conflict.
+    git pull --ff-only origin $INSTALLER_BRANCH #Pull update from remote only if there will be no conflict.
   fi
 fi
 
@@ -142,21 +142,21 @@ env | sort | grep -e KUBEDB* -e APPSCODE*
 echo ""
 
 if [ "$SELF_HOSTED" -eq 1 ]; then
-  echo "${KUBEDB_SCRIPT}hack/deploy/kubedb.sh | bash -s -- --operator-name=maria-operator $ARGS"
-  ${KUBEDB_SCRIPT}hack/deploy/kubedb.sh | bash -s -- --operator-name=maria-operator ${ARGS}
+  echo "${KUBEDB_SCRIPT}hack/deploy/kubedb.sh | bash -s -- --operator-name=mariadb-operator $ARGS"
+  ${KUBEDB_SCRIPT}hack/deploy/kubedb.sh | bash -s -- --operator-name=mariadb-operator ${ARGS}
 fi
 
 if [ "$MINIKUBE" -eq 1 ]; then
-  cat $CLI_ROOT/hack/deploy/validating-webhook.yaml | $ONESSL envsubst | kubectl apply -f -
-  cat $CLI_ROOT/hack/deploy/mutating-webhook.yaml | $ONESSL envsubst | kubectl apply -f -
+  cat $INSTALLER_ROOT/deploy/validating-webhook.yaml | $ONESSL envsubst | kubectl apply -f -
+  cat $INSTALLER_ROOT/deploy/mutating-webhook.yaml | $ONESSL envsubst | kubectl apply -f -
   cat $REPO_ROOT/hack/dev/apiregistration.yaml | $ONESSL envsubst | kubectl apply -f -
-  cat $CLI_ROOT/hack/deploy/psp/mariadb.yaml | $ONESSL envsubst | kubectl apply -f -
+  cat $INSTALLER_ROOT/deploy/psp/mariadb.yaml | $ONESSL envsubst | kubectl apply -f -
   # Following line may give error if DBVersions CRD already not created
-  cat $CLI_ROOT/hack/deploy/kubedb-catalog/mariadb.yaml | $ONESSL envsubst | kubectl apply -f - || true
+  cat $INSTALLER_ROOT/deploy/kubedb-catalog/mariadb.yaml | $ONESSL envsubst | kubectl apply -f - || true
 
   if [ "$MINIKUBE_RUN" -eq 1 ]; then
     $REPO_ROOT/hack/make.py
-    maria-operator run --v=4 \
+    mariadb-operator run --v=4 \
       --secure-port=8443 \
       --enable-status-subresource=true \
       --enable-mutating-webhook=true \
@@ -167,7 +167,7 @@ if [ "$MINIKUBE" -eq 1 ]; then
   fi
 fi
 
-if [ $(pwd) = "$CLI_ROOT" ]; then
+if [ $(pwd) = "$INSTALLER_ROOT" ]; then
   popd
 fi
 popd

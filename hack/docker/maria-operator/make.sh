@@ -14,7 +14,7 @@ source "$REPO_ROOT/hack/libbuild/common/kubedb_image.sh"
 
 APPSCODE_ENV=${APPSCODE_ENV:-dev}
 DOCKER_REGISTRY=${DOCKER_REGISTRY:-kubedb}
-IMG=maria-operator
+IMG=mariadb-operator
 
 DIST=$GOPATH/src/github.com/kubedb/mariadb/dist
 mkdir -p $DIST
@@ -23,23 +23,23 @@ if [ -f "$DIST/.tag" ]; then
 fi
 
 clean() {
-  pushd $REPO_ROOT/hack/docker/maria-operator
-  rm -f maria-operator Dockerfile
+  pushd $REPO_ROOT/hack/docker/mariadb-operator
+  rm -f mariadb-operator Dockerfile
   popd
 }
 
 build_binary() {
   pushd $REPO_ROOT
   ./hack/builddeps.sh
-  ./hack/make.py build maria-operator
+  ./hack/make.py build mariadb-operator
   detect_tag $DIST/.tag
   popd
 }
 
 build_docker() {
-  pushd $REPO_ROOT/hack/docker/maria-operator
-  cp $DIST/maria-operator/maria-operator-alpine-amd64 maria-operator
-  chmod 755 maria-operator
+  pushd $REPO_ROOT/hack/docker/mariadb-operator
+  cp $DIST/mariadb-operator/mariadb-operator-alpine-amd64 mariadb-operator
+  chmod 755 mariadb-operator
 
   cat >Dockerfile <<EOL
 FROM alpine:3.8
@@ -47,15 +47,15 @@ FROM alpine:3.8
 RUN set -x \
   && apk add --update --no-cache ca-certificates
 
-COPY maria-operator /usr/bin/maria-operator
+COPY mariadb-operator /usr/bin/mariadb-operator
 
 USER nobody:nobody
-ENTRYPOINT ["maria-operator"]
+ENTRYPOINT ["mariadb-operator"]
 EOL
   local cmd="docker build --pull -t $DOCKER_REGISTRY/$IMG:$TAG ."
   echo $cmd; $cmd
 
-  rm maria-operator Dockerfile
+  rm mariadb-operator Dockerfile
   popd
 }
 

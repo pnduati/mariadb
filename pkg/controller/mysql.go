@@ -61,8 +61,8 @@ func (c *Controller) create(mariadb *api.MariaDB) error {
 	c.GoverningService = governingService
 
 	if c.EnableRBAC {
-		// Ensure ClusterRoles for statefulsets
-		if err := c.ensureRBACStuff(mariadb); err != nil {
+		// Ensure Service account, role, rolebinding, and PSP for database statefulsets
+		if err := c.ensureDatabaseRBAC(mariadb); err != nil {
 			return err
 		}
 	}
@@ -99,26 +99,42 @@ func (c *Controller) create(mariadb *api.MariaDB) error {
 		)
 	}
 
-	if _, err := meta_util.GetString(mariadb.Annotations, api.AnnotationInitialized); err == kutil.ErrNotFound &&
-		mariadb.Spec.Init != nil && mariadb.Spec.Init.SnapshotSource != nil {
+	// ensure appbinding before ensuring Restic scheduler and restore
+	_, err = c.ensureAppBinding(mariadb)
+	if err != nil {
+		log.Errorln(err)
+		return err
+	}
 
-		snapshotSource := mariadb.Spec.Init.SnapshotSource
+	if _, err := meta_util.GetString(mariadb.Annotations, api.AnnotationInitialized); err == kutil.ErrNotFound &&
+		mariadb.Spec.Init != nil &&
+		(mariadb.Spec.Init.SnapshotSource != nil || mariadb.Spec.Init.StashRestoreSession != nil) {
 
 		if mariadb.Status.Phase == api.DatabasePhaseInitializing {
 			return nil
 		}
-		jobName := fmt.Sprintf("%s-%s", api.DatabaseNamePrefix, snapshotSource.Name)
-		if _, err := c.Client.BatchV1().Jobs(snapshotSource.Namespace).Get(jobName, metav1.GetOptions{}); err != nil {
-			if !kerr.IsNotFound(err) {
-				return err
+
+		// add phase that database is being initialized
+		mg, err := util.UpdateMariaDBStatus(c.ExtClient.KubedbV1alpha1(), mariadb, func(in *api.MariaDBStatus) *api.MariaDBStatus {
+			in.Phase = api.DatabasePhaseInitializing
+			return in
+		}, apis.EnableStatusSubresource)
+		if err != nil {
+			return err
+		}
+		mariadb.Status = mg.Status
+
+		init := mariadb.Spec.Init
+		if init.SnapshotSource != nil {
+			err = c.initializeFromSnapshot(mariadb)
+			if err != nil {
+				return fmt.Errorf("failed to complete initialization. Reason: %v", err)
 			}
-		} else {
+			return err
+		} else if init.StashRestoreSession != nil {
+			log.Debugf("MariaDB %v/%v is waiting for restoreSession to be succeeded", mariadb.Namespace, mariadb.Name)
 			return nil
 		}
-		if err := c.initialize(mariadb); err != nil {
-			return fmt.Errorf("failed to complete initialization for %v/%v. Reason: %v", mariadb.Namespace, mariadb.Name, err)
-		}
-		return nil
 	}
 
 	my, err := util.UpdateMariaDBStatus(c.ExtClient.KubedbV1alpha1(), mariadb, func(in *api.MariaDBStatus) *api.MariaDBStatus {
@@ -168,12 +184,6 @@ func (c *Controller) create(mariadb *api.MariaDB) error {
 		return nil
 	}
 
-	_, err = c.ensureAppBinding(mariadb)
-	if err != nil {
-		log.Errorln(err)
-		return err
-	}
-
 	return nil
 }
 
@@ -194,17 +204,17 @@ func (c *Controller) ensureBackupScheduler(mariadb *api.MariaDB) error {
 	return nil
 }
 
-func (c *Controller) initialize(mariadb *api.MariaDB) error {
-	my, err := util.UpdateMariaDBStatus(c.ExtClient.KubedbV1alpha1(), mariadb, func(in *api.MariaDBStatus) *api.MariaDBStatus {
-		in.Phase = api.DatabasePhaseInitializing
-		return in
-	}, apis.EnableStatusSubresource)
-	if err != nil {
-		return err
-	}
-	mariadb.Status = my.Status
-
+func (c *Controller) initializeFromSnapshot(mariadb *api.MariaDB) error {
 	snapshotSource := mariadb.Spec.Init.SnapshotSource
+	jobName := fmt.Sprintf("%s-%s", api.DatabaseNamePrefix, snapshotSource.Name)
+	if _, err := c.Client.BatchV1().Jobs(snapshotSource.Namespace).Get(jobName, metav1.GetOptions{}); err != nil {
+		if !kerr.IsNotFound(err) {
+			return err
+		}
+	} else {
+		return nil
+	}
+
 	// Event for notification that kubernetes objects are creating
 	c.recorder.Eventf(
 		mariadb,

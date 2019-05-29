@@ -5,7 +5,6 @@ import (
 
 	"github.com/appscode/go/log"
 	"github.com/appscode/go/types"
-	catalog "github.com/kubedb/apimachinery/apis/catalog/v1alpha1"
 	api "github.com/kubedb/apimachinery/apis/kubedb/v1alpha1"
 	"github.com/kubedb/mariadb/test/e2e/framework"
 	"github.com/kubedb/mariadb/test/e2e/matcher"
@@ -20,27 +19,12 @@ var _ = Describe("MariaDB Group Replication Tests", func() {
 		f              *framework.Invocation
 		mariadb        *api.MariaDB
 		garbageMariaDB *api.MariaDBList
-		mariadbVersion *catalog.MariaDBVersion
 		//skipMessage string
 		dbName       string
 		dbNameKubedb string
 	)
 
-	BeforeEach(func() {
-		f = root.Invoke()
-		mariadb = f.MariaDBGroup()
-		garbageMariaDB = new(api.MariaDBList)
-		mariadbVersion = f.MariaDBVersion()
-		//skipMessage = ""
-		dbName = "mariadb"
-		dbNameKubedb = "kubedb"
-	})
-
 	var createAndWaitForRunning = func() {
-		By("Create MariaDBVersion: " + mariadbVersion.Name)
-		err = f.CreateMariaDBVersion(mariadbVersion)
-		Expect(err).NotTo(HaveOccurred())
-
 		By("Create MariaDB: " + mariadb.Name)
 		err = f.CreateMariaDB(mariadb)
 		Expect(err).NotTo(HaveOccurred())
@@ -111,6 +95,22 @@ var _ = Describe("MariaDB Group Replication Tests", func() {
 		f.EventuallyInsertRow(mariadb.ObjectMeta, dbNameKubedb, primaryPodIndex, rowCnt).Should(BeTrue())
 		f.EventuallyCountRow(mariadb.ObjectMeta, dbNameKubedb, primaryPodIndex).Should(Equal(rowCnt))
 	}
+	var CheckDBVersionForGroupReplication = func() {
+		if framework.DBCatalogName != "5.7.25" && framework.DBCatalogName != "5.7-v1" {
+			Skip("For group replication CheckDBVersionForGroupReplication, DB version must be one of '5.7.25' or '5.7-v1'")
+		}
+	}
+
+	BeforeEach(func() {
+		f = root.Invoke()
+		mariadb = f.MariaDBGroup()
+		garbageMariaDB = new(api.MariaDBList)
+		//skipMessage = ""
+		dbName = "mariadb"
+		dbNameKubedb = "kubedb"
+
+		CheckDBVersionForGroupReplication()
+	})
 
 	Context("Behaviour tests", func() {
 		BeforeEach(func() {
@@ -125,12 +125,6 @@ var _ = Describe("MariaDB Group Replication Tests", func() {
 			for _, my := range garbageMariaDB.Items {
 				*mariadb = my
 				deleteTestResource()
-			}
-
-			By("Deleting MariaDBVersion crd")
-			err := f.DeleteMariaDBVersion(mariadbVersion.ObjectMeta)
-			if err != nil && !kerr.IsNotFound(err) {
-				Expect(err).NotTo(HaveOccurred())
 			}
 
 			By("Delete left over workloads if exists any")
@@ -289,6 +283,19 @@ var _ = Describe("MariaDB Group Replication Tests", func() {
 				By(fmt.Sprintf("Read from secondary '%s-%d'", mariadb.Name, i))
 				f.EventuallyCountRow(mariadb.ObjectMeta, dbNameKubedb, i).Should(Equal(rowCnt))
 			}
+		})
+	})
+
+	Context("PDB", func() {
+
+		It("should run evictions successfully", func() {
+			// Create MariaDB
+			By("Create and run MariaDB Group with three replicas")
+			createAndWaitForRunning()
+			//Evict MariaDB pods
+			By("Try to evict pods")
+			err := f.EvictPodsFromStatefulSet(mariadb.ObjectMeta)
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })

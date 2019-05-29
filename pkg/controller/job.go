@@ -178,7 +178,14 @@ func (c *Controller) createRestoreJob(mariadb *api.MariaDB, snapshot *api.Snapsh
 	}
 
 	if c.EnableRBAC {
-		job.Spec.Template.Spec.ServiceAccountName = mariadb.SnapshotSAName()
+		if snapshot.Spec.PodTemplate.Spec.ServiceAccountName == "" {
+			job.Spec.Template.Spec.ServiceAccountName = mariadb.SnapshotSAName()
+			if err := c.ensureSnapshotRBAC(mariadb); err != nil {
+				return nil, err
+			}
+		} else {
+			job.Spec.Template.Spec.ServiceAccountName = snapshot.Spec.PodTemplate.Spec.ServiceAccountName
+		}
 	}
 
 	return c.Client.BatchV1().Jobs(mariadb.Namespace).Create(job)
@@ -355,7 +362,15 @@ func (c *Controller) getSnapshotterJob(snapshot *api.Snapshot) (*batch.Job, erro
 	}
 
 	if c.EnableRBAC {
-		job.Spec.Template.Spec.ServiceAccountName = mariadb.SnapshotSAName()
+		if snapshot.Spec.PodTemplate.Spec.ServiceAccountName == "" {
+			job.Spec.Template.Spec.ServiceAccountName = mariadb.SnapshotSAName()
+			if err := c.ensureSnapshotRBAC(mariadb); err != nil {
+				return nil, err
+			}
+		} else {
+			job.Spec.Template.Spec.ServiceAccountName = snapshot.Spec.PodTemplate.Spec.ServiceAccountName
+		}
+
 	}
 
 	return job, nil

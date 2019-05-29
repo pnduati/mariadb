@@ -56,7 +56,7 @@ func (c *Controller) createDatabaseSecret(mariadb *api.MariaDB) (*core.SecretVol
 		secret := &core.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   authSecretName,
-				Labels: mariadb.OffshootSelectors(),
+				Labels: mariadb.OffshootLabels(),
 			},
 			Type: core.SecretTypeOpaque,
 			StringData: map[string]string{

@@ -370,6 +370,9 @@ func matchWithDormantDatabase(extClient cs.Interface, mariadb *api.MariaDB) erro
 	// Skip checking TerminationPolicy
 	drmnOriginSpec.TerminationPolicy = originalSpec.TerminationPolicy
 
+	// Skip checking ServiceAccountName
+	drmnOriginSpec.PodTemplate.Spec.ServiceAccountName = originalSpec.PodTemplate.Spec.ServiceAccountName
+
 	// Skip checking Monitoring
 	drmnOriginSpec.Monitor = originalSpec.Monitor
 

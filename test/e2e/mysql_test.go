@@ -6,7 +6,6 @@ import (
 
 	"github.com/appscode/go/log"
 	"github.com/appscode/go/types"
-	catalog "github.com/kubedb/apimachinery/apis/catalog/v1alpha1"
 	api "github.com/kubedb/apimachinery/apis/kubedb/v1alpha1"
 	"github.com/kubedb/apimachinery/client/clientset/versioned/typed/kubedb/v1alpha1/util"
 	"github.com/kubedb/mariadb/test/e2e/framework"
@@ -14,10 +13,13 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	core "k8s.io/api/core/v1"
+	rbac "k8s.io/api/rbac/v1"
 	kerr "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	meta_util "kmodules.xyz/client-go/meta"
 	store "kmodules.xyz/objectstore-api/api/v1"
+	stashV1alpha1 "stash.appscode.dev/stash/apis/stash/v1alpha1"
+	stashV1beta1 "stash.appscode.dev/stash/apis/stash/v1beta1"
 )
 
 const (
@@ -35,7 +37,6 @@ var _ = Describe("MariaDB", func() {
 		f                *framework.Invocation
 		mariadb          *api.MariaDB
 		garbageMariaDB   *api.MariaDBList
-		mariadbVersion   *catalog.MariaDBVersion
 		snapshot         *api.Snapshot
 		secret           *core.Secret
 		skipMessage      string
@@ -47,7 +48,6 @@ var _ = Describe("MariaDB", func() {
 		f = root.Invoke()
 		mariadb = f.MariaDB()
 		garbageMariaDB = new(api.MariaDBList)
-		mariadbVersion = f.MariaDBVersion()
 		snapshot = f.Snapshot()
 		skipMessage = ""
 		skipDataChecking = true
@@ -55,10 +55,6 @@ var _ = Describe("MariaDB", func() {
 	})
 
 	var createAndWaitForRunning = func() {
-		By("Create MariaDBVersion: " + mariadbVersion.Name)
-		err = f.CreateMariaDBVersion(mariadbVersion)
-		Expect(err).NotTo(HaveOccurred())
-
 		By("Create MariaDB: " + mariadb.Name)
 		err = f.CreateMariaDB(mariadb)
 		Expect(err).NotTo(HaveOccurred())
@@ -245,12 +241,6 @@ var _ = Describe("MariaDB", func() {
 			deleteTestResource()
 		}
 
-		By("Deleting MariaDBVersion crd")
-		err := f.DeleteMariaDBVersion(mariadbVersion.ObjectMeta)
-		if err != nil && !kerr.IsNotFound(err) {
-			Expect(err).NotTo(HaveOccurred())
-		}
-
 		By("Delete left over workloads if exists any")
 		f.CleanWorkloadLeftOvers()
 	})
@@ -261,6 +251,68 @@ var _ = Describe("MariaDB", func() {
 
 			Context("-", func() {
 				It("should run successfully", testGeneralBehaviour)
+			})
+
+			Context("with custom SA Name", func() {
+				BeforeEach(func() {
+					var customSecret *core.Secret
+					customSecret = f.SecretForDatabaseAuthentication(mariadb.ObjectMeta, false)
+					mariadb.Spec.DatabaseSecret = &core.SecretVolumeSource{
+						SecretName: customSecret.Name,
+					}
+					err := f.CreateSecret(customSecret)
+					Expect(err).NotTo(HaveOccurred())
+					mariadb.Spec.PodTemplate.Spec.ServiceAccountName = "my-custom-sa"
+					mariadb.Spec.TerminationPolicy = api.TerminationPolicyPause
+				})
+
+				It("should start and resume successfully", func() {
+					//shouldTakeSnapshot()
+					createAndWaitForRunning()
+					if mariadb == nil {
+						Skip("Skipping")
+					}
+					By("Check if Postgres " + mariadb.Name + " exists.")
+					_, err := f.GetMariaDB(mariadb.ObjectMeta)
+					if err != nil {
+						if kerr.IsNotFound(err) {
+							// Postgres was not created. Hence, rest of cleanup is not necessary.
+							return
+						}
+						Expect(err).NotTo(HaveOccurred())
+					}
+
+					By("Delete mariadb: " + mariadb.Name)
+					err = f.DeleteMariaDB(mariadb.ObjectMeta)
+					if err != nil {
+						if kerr.IsNotFound(err) {
+							// Postgres was not created. Hence, rest of cleanup is not necessary.
+							log.Infof("Skipping rest of cleanup. Reason: Postgres %s is not found.", mariadb.Name)
+							return
+						}
+						Expect(err).NotTo(HaveOccurred())
+					}
+
+					By("Wait for mariadb to be paused")
+					f.EventuallyDormantDatabaseStatus(mariadb.ObjectMeta).Should(matcher.HavePaused())
+
+					By("Resume DB")
+					createAndWaitForRunning()
+				})
+			})
+
+			Context("PDB", func() {
+
+				It("should run eviction successfully", func() {
+					mariadb.Spec.Replicas = types.Int32P(3)
+					// Create MariaDB
+					By("Create and run MariaDB with three replicas")
+					createAndWaitForRunning()
+					//Evict MariaDB pods
+					By("Try to evict pods")
+					err := f.EvictPodsFromStatefulSet(mariadb.ObjectMeta)
+					Expect(err).NotTo(HaveOccurred())
+				})
 			})
 		})
 
@@ -280,6 +332,153 @@ var _ = Describe("MariaDB", func() {
 				if err != nil && !kerr.IsNotFound(err) {
 					Expect(err).NotTo(HaveOccurred())
 				}
+			})
+
+			Context("For Custom Resources", func() {
+
+				BeforeEach(func() {
+					snapshot.Spec.DatabaseName = mariadb.Name
+					secret = f.SecretForGCSBackend()
+					snapshot.Spec.StorageSecretName = secret.Name
+					snapshot.Spec.GCS = &store.GCSSpec{
+						Bucket: os.Getenv(GCS_BUCKET_NAME),
+					}
+				})
+
+				Context("with custom SA", func() {
+					var customSAForDB *core.ServiceAccount
+					var customRoleForDB *rbac.Role
+					var customRoleBindingForDB *rbac.RoleBinding
+					var customSAForSnapshot *core.ServiceAccount
+					var customRoleForSnapshot *rbac.Role
+					var customRoleBindingForSnapshot *rbac.RoleBinding
+					BeforeEach(func() {
+						mariadb.Spec.TerminationPolicy = api.TerminationPolicyWipeOut
+						customSAForDB = f.ServiceAccount()
+						mariadb.Spec.PodTemplate.Spec.ServiceAccountName = customSAForDB.Name
+						customRoleForDB = f.RoleForMariaDB(mariadb.ObjectMeta)
+						customRoleBindingForDB = f.RoleBinding(customSAForDB.Name, customRoleForDB.Name)
+
+						customSAForSnapshot = f.ServiceAccount()
+						snapshot.Spec.PodTemplate.Spec.ServiceAccountName = customSAForSnapshot.Name
+						customRoleForSnapshot = f.RoleForSnapshot(mariadb.ObjectMeta)
+						customRoleBindingForSnapshot = f.RoleBinding(customSAForSnapshot.Name, customRoleForSnapshot.Name)
+
+						By("Create Database SA")
+						err = f.CreateServiceAccount(customSAForDB)
+						Expect(err).NotTo(HaveOccurred())
+						By("Create Database Role")
+						err = f.CreateRole(customRoleForDB)
+						Expect(err).NotTo(HaveOccurred())
+						By("Create Database RoleBinding")
+						err = f.CreateRoleBinding(customRoleBindingForDB)
+						Expect(err).NotTo(HaveOccurred())
+
+						By("Create Snapshot SA")
+						err = f.CreateServiceAccount(customSAForSnapshot)
+						Expect(err).NotTo(HaveOccurred())
+						By("Create Snapshot Role")
+						err = f.CreateRole(customRoleForSnapshot)
+						Expect(err).NotTo(HaveOccurred())
+						By("Create Snapshot RoleBinding")
+						err = f.CreateRoleBinding(customRoleBindingForSnapshot)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("should take snapshot successfully", func() {
+						shouldInsertDataAndTakeSnapshot()
+					})
+
+					It("should initialize from snapshot successfully", func() {
+						// Create MariaDB and take Snapshot
+						shouldInsertDataAndTakeSnapshot()
+
+						oldMariaDB, err := f.GetMariaDB(mariadb.ObjectMeta)
+						Expect(err).NotTo(HaveOccurred())
+						garbageMariaDB.Items = append(garbageMariaDB.Items, *oldMariaDB)
+
+						By("Create mariadb from snapshot")
+						mariadb = f.MariaDB()
+						mariadb.Spec.Init = &api.InitSpec{
+							SnapshotSource: &api.SnapshotSourceSpec{
+								Namespace: snapshot.Namespace,
+								Name:      snapshot.Name,
+							},
+						}
+
+						By("Creating init Snapshot Mysql without secret name" + mariadb.Name)
+						err = f.CreateMariaDB(mariadb)
+						Expect(err).Should(HaveOccurred())
+
+						// for snapshot init, user have to use older secret,
+						// because the username & password  will be replaced to
+						mariadb.Spec.DatabaseSecret = oldMariaDB.Spec.DatabaseSecret
+
+						//Create New role and bind it to existing SA
+						By("Get new Role and RB")
+						customRoleForReplayDB := f.RoleForMariaDB(mariadb.ObjectMeta)
+						customRoleBindingForReplayDB := f.RoleBinding(customSAForDB.Name, customRoleForReplayDB.Name)
+
+						By("Create Database Role")
+						err = f.CreateRole(customRoleForReplayDB)
+						Expect(err).NotTo(HaveOccurred())
+						By("Create Database RoleBinding")
+						err = f.CreateRoleBinding(customRoleBindingForReplayDB)
+						Expect(err).NotTo(HaveOccurred())
+
+						mariadb.Spec.PodTemplate.Spec.ServiceAccountName = customSAForDB.Name
+
+						// Create and wait for running MariaDB
+						By("Create DB with snapshot data")
+						createAndWaitForRunning()
+
+						By("Checking Row Count of Table")
+						f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
+					})
+				})
+
+				Context("with custom Secret", func() {
+					var customSecret *core.Secret
+					BeforeEach(func() {
+						customSecret = f.SecretForDatabaseAuthentication(mariadb.ObjectMeta, false)
+						mariadb.Spec.DatabaseSecret = &core.SecretVolumeSource{
+							SecretName: customSecret.Name,
+						}
+
+					})
+
+					It("should not delete database secret", func() {
+						By("Create Database Secret")
+						err := f.CreateSecret(customSecret)
+						Expect(err).NotTo(HaveOccurred())
+
+						By("Take Snapshot")
+						shouldTakeSnapshot()
+						By("Delete test resources")
+						deleteTestResource()
+						By("Confirm Database Secret exists")
+						err = f.CheckSecret(customSecret)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("should delete database secret", func() {
+						kubedbSecret := f.SecretForDatabaseAuthentication(mariadb.ObjectMeta, true)
+						mariadb.Spec.DatabaseSecret = &core.SecretVolumeSource{
+							SecretName: kubedbSecret.Name,
+						}
+						By("Create Database Secret")
+						err = f.CreateSecret(kubedbSecret)
+						Expect(err).NotTo(HaveOccurred())
+
+						By("Take Snapshot")
+						shouldTakeSnapshot()
+						By("Delete test resources")
+						deleteTestResource()
+						By("Confirm Database Secret doesnt exist")
+						err = f.CheckSecret(kubedbSecret)
+						Expect(err).To(HaveOccurred())
+					})
+				})
 			})
 
 			Context("In Local", func() {
@@ -850,7 +1049,7 @@ var _ = Describe("MariaDB", func() {
 						},
 					}
 
-					By("Creating init Snapshot MARIADB without secret name" + mariadb.Name)
+					By("Creating init Snapshot Mysql without secret name" + mariadb.Name)
 					err = f.CreateMariaDB(mariadb)
 					Expect(err).Should(HaveOccurred())
 
@@ -914,6 +1113,158 @@ var _ = Describe("MariaDB", func() {
 					It("should initialize successfully", shouldInitializeFromSnapshot)
 				})
 			})
+
+			// To run this test,
+			// 1st: Deploy stash latest operator
+			// 2nd: create mariadb related tasks and functions from
+			// `github.com/kubedb/mariadb/hack/dev/examples/stash01_config.yaml`
+			Context("With Stash/Restic", func() {
+				var bc *stashV1beta1.BackupConfiguration
+				var bs *stashV1beta1.BackupSession
+				var rs *stashV1beta1.RestoreSession
+				var repo *stashV1alpha1.Repository
+
+				BeforeEach(func() {
+					skipDataChecking = true
+					if !f.FoundStashCRDs() {
+						Skip("Skipping tests for stash integration. reason: stash operator is not running.")
+					}
+				})
+
+				AfterEach(func() {
+					By("Deleting BackupConfiguration")
+					err := f.DeleteBackupConfiguration(bc.ObjectMeta)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("Deleting BackupSession")
+					err = f.DeleteBackupSession(bs.ObjectMeta)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("Deleting RestoreSession")
+					err = f.DeleteRestoreSession(rs.ObjectMeta)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("Deleting Repository")
+					err = f.DeleteRepository(repo.ObjectMeta)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("Deleting Stash RBACs")
+					err = f.DeleteStashMariaDBRBAC(mariadb.ObjectMeta)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				var createAndWaitForInitializing = func() {
+					By("Creating MariaDB: " + mariadb.Name)
+					err = f.CreateMariaDB(mariadb)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("Wait for Initializing mariadb")
+					f.EventuallyMariaDBPhase(mariadb.ObjectMeta).Should(Equal(api.DatabasePhaseInitializing))
+
+					By("Wait for AppBinding to create")
+					f.EventuallyAppBinding(mariadb.ObjectMeta).Should(BeTrue())
+
+					By("Check valid AppBinding Specs")
+					err = f.CheckAppBindingSpec(mariadb.ObjectMeta)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("Waiting for database to be ready")
+					f.EventuallyDatabaseReady(mariadb.ObjectMeta, dbName).Should(BeTrue())
+				}
+
+				var shouldInitializeFromStash = func() {
+					By("Ensuring Stash RBACs")
+					err := f.EnsureStashMariaDBRBAC(mariadb.ObjectMeta)
+					Expect(err).NotTo(HaveOccurred())
+
+					// Create and wait for running MariaDB
+					createAndWaitForRunning()
+
+					By("Creating Table")
+					f.EventuallyCreateTable(mariadb.ObjectMeta, dbName).Should(BeTrue())
+
+					By("Inserting Rows")
+					f.EventuallyInsertRow(mariadb.ObjectMeta, dbName, 0, 3).Should(BeTrue())
+
+					By("Checking Row Count of Table")
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
+
+					By("Create Secret")
+					err = f.CreateSecret(secret)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("Create Repositories")
+					err = f.CreateRepository(repo)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("Create BackupConfiguration")
+					err = f.CreateBackupConfiguration(bc)
+					Expect(err).NotTo(HaveOccurred())
+
+					By("Create BackupSession")
+					err = f.CreateBackupSession(bs)
+					Expect(err).NotTo(HaveOccurred())
+
+					// eventually backupsession succeeded
+					By("Check for Succeeded backupsession")
+					f.EventuallyBackupSessionPhase(bs.ObjectMeta).Should(Equal(stashV1beta1.BackupSessionSucceeded))
+
+					oldMariaDB, err := f.GetMariaDB(mariadb.ObjectMeta)
+					Expect(err).NotTo(HaveOccurred())
+
+					garbageMariaDB.Items = append(garbageMariaDB.Items, *oldMariaDB)
+
+					By("Create mariadb from stash")
+					*mariadb = *f.MariaDB()
+					rs = f.RestoreSession(mariadb.ObjectMeta, oldMariaDB.ObjectMeta)
+					mariadb.Spec.DatabaseSecret = oldMariaDB.Spec.DatabaseSecret
+					mariadb.Spec.Init = &api.InitSpec{
+						StashRestoreSession: &core.LocalObjectReference{
+							Name: rs.Name,
+						},
+					}
+
+					// Create and wait for running MariaDB
+					createAndWaitForInitializing()
+
+					By("Create RestoreSession")
+					err = f.CreateRestoreSession(rs)
+					Expect(err).NotTo(HaveOccurred())
+
+					// eventually backupsession succeeded
+					By("Check for Succeeded restoreSession")
+					f.EventuallyRestoreSessionPhase(rs.ObjectMeta).Should(Equal(stashV1beta1.RestoreSessionSucceeded))
+
+					By("Wait for Running mariadb")
+					f.EventuallyMariaDBRunning(mariadb.ObjectMeta).Should(BeTrue())
+
+					By("Checking Row Count of Table")
+					f.EventuallyCountRow(mariadb.ObjectMeta, dbName, 0).Should(Equal(3))
+				}
+
+				Context("From GCS backend", func() {
+
+					BeforeEach(func() {
+						secret = f.SecretForGCSBackend()
+						secret = f.PatchSecretForRestic(secret)
+						bc = f.BackupConfiguration(mariadb.ObjectMeta)
+						bs = f.BackupSession(mariadb.ObjectMeta)
+						repo = f.Repository(mariadb.ObjectMeta, secret.Name)
+
+						repo.Spec.Backend = store.Backend{
+							GCS: &store.GCSSpec{
+								Bucket: os.Getenv("GCS_BUCKET_NAME"),
+								Prefix: fmt.Sprintf("stash/%v/%v", mariadb.Namespace, mariadb.Name),
+							},
+							StorageSecretName: secret.Name,
+						}
+					})
+
+					It("should run successfully", shouldInitializeFromStash)
+				})
+
+			})
+
 		})
 
 		Context("Resume", func() {

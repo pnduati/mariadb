@@ -31,7 +31,7 @@ func NewMariaDBServerOptions(out, errOut io.Writer) *MariaDBServerOptions {
 		RecommendedOptions: genericoptions.NewRecommendedOptions(
 			defaultEtcdPathPrefix,
 			server.Codecs.LegacyCodec(admissionv1beta1.SchemeGroupVersion),
-			genericoptions.NewProcessInfo("maria-operator", meta.Namespace()),
+			genericoptions.NewProcessInfo("mariadb-operator", meta.Namespace()),
 		),
 		ExtraOptions: NewExtraOptions(),
 		StdOut:       out,

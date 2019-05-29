@@ -1,8 +1,8 @@
-To deploy maria-operator in self-hosted:
+To deploy mariadb-operator in self-hosted:
 
     $ ./hack/deploy/setup.sh --docker-registry=<docker-registry-name> (--selfhosted)
 
-To run maria-operator in local machine to connect minikube:
+To run mariadb-operator in local machine to connect minikube:
 
     $ ./hack/deploy/setup.sh --minikube
 

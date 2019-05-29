@@ -4,7 +4,7 @@ set -eoux pipefail
 
 ORG_NAME=kubedb
 REPO_NAME=mariadb
-OPERATOR_NAME=maria-operator
+OPERATOR_NAME=mariadb-operator
 APP_LABEL=kubedb #required for `kubectl describe deploy -n kube-system -l app=$APP_LABEL`
 
 export APPSCODE_ENV=dev
